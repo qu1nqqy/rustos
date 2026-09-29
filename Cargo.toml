@@ -13,3 +13,6 @@ panic = "abort"
 name = "rustos"
 test = false
 bench = false
+
+[dependencies]
+bootloader = "0.9"
