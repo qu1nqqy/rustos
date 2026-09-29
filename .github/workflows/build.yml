@@ -1,0 +1,55 @@
+name: build
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # версия и компоненты берутся из rust-toolchain.toml
+      - name: Install toolchain
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+
+      - name: Install bootimage
+        run: cargo install bootimage --locked
+
+      - name: Build debug image
+        run: make build
+
+      - name: Build release image
+        run: make release
+
+      - name: Collect images
+        run: |
+          mkdir dist
+          cp target/x86-rustos/debug/bootimage-rustos.bin   dist/rustos-debug.bin
+          cp target/x86-rustos/release/bootimage-rustos.bin dist/rustos-release.bin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rustos-${{ github.sha }}
+          path: dist/*.bin
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          gh release create "build-${SHORT_SHA}" dist/*.bin \
+            --target "$GITHUB_SHA" \
+            --title "build ${SHORT_SHA}" \
+            --notes "Сборка коммита ${GITHUB_SHA}: $(git log -1 --pretty=%s)
+
+          Запуск: \`qemu-system-x86_64 -drive format=raw,file=rustos-release.bin\`"
