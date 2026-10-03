@@ -58,3 +58,26 @@ fn test_init_sets_kernel_code_segment() {
     assert_eq!(cs.index(), 1);
     assert_eq!(cs.rpl(), PrivilegeLevel::Ring0);
 }
+
+#[test_case]
+fn test_init_enables_interrupts() {
+    assert!(x86_64::instructions::interrupts::are_enabled());
+}
+
+#[test_case]
+fn test_timer_interrupt_arrives() {
+    // hlt ждёт следующего прерывания. Если PIC не настроен или таймер
+    // замаскирован, тест зависнет и упадёт по test-timeout
+    for _ in 0..3 {
+        x86_64::instructions::hlt();
+    }
+}
+
+#[test_case]
+fn test_println_no_deadlock_with_timer() {
+    // обработчик таймера печатает '.', поэтому если println! возьмёт
+    // WRITER с включёнными прерываниями, рано или поздно будет deadlock
+    for i in 0..1000 {
+        rustos::println!("test_println_no_deadlock_with_timer {}", i);
+    }
+}
