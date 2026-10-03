@@ -2,7 +2,13 @@ use lazy_static::lazy_static;
 use x86_64::VirtAddr;
 use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable, SegmentSelector};
 use x86_64::structures::tss::TaskStateSegment;
+
 pub const DOUBLE_FAULT_IST_INDEX: u16 = 0;
+
+struct Selectors {
+    code_selector: SegmentSelector,
+    tss_selector: SegmentSelector,
+}
 
 lazy_static! {
     static ref TSS: TaskStateSegment = {
@@ -17,11 +23,6 @@ lazy_static! {
         };
         tss
     };
-}
-
-struct Selectors {
-    code_selector: SegmentSelector,
-    tss_selector: SegmentSelector,
 }
 
 lazy_static! {
