@@ -33,3 +33,11 @@ features = ["spin_no_std"]
 [[test]]
 name = "should_panic"
 harness = false
+
+[[test]]
+name = "stack_overflow"
+harness = false
+
+[[test]]
+name = "double_fault"
+harness = false
