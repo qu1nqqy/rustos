@@ -62,7 +62,8 @@ pub fn test_panic_handler(info: &PanicInfo) -> ! {
 #[cfg(test)]
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
-    init();
+    // init() здесь не вызывается: unit-тесты не меняют состояние CPU,
+    // загрузка GDT/IDT и прерывания проверяются в tests/ (см. testing.md)
     test_main();
     hlt_loop();
 }
