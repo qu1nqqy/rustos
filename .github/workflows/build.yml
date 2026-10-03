@@ -2,19 +2,49 @@ name: build
 
 on:
   push:
+    branches: [master, dev]
+  pull_request:
     branches: [master]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       # версия и компоненты берутся из rust-toolchain.toml
+      - name: Install toolchain
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+
+      - name: Install bootimage
+        run: cargo install bootimage --locked
+
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86
+
+      - name: Run tests
+        run: make test
+
+  release:
+    needs: test
+    # релизы только из master, пуши в dev и PR проходят лишь тесты
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Install toolchain
         run: rustup toolchain install
 

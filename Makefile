@@ -6,7 +6,7 @@ QEMU_ARGS ?=
 DEBUG_IMG   := target/$(TARGET)/debug/bootimage-$(KERNEL).bin
 RELEASE_IMG := target/$(TARGET)/release/bootimage-$(KERNEL).bin
 
-.PHONY: all build release run run-release clean
+.PHONY: all build release run run-release clean test
 
 all: build
 
@@ -24,3 +24,6 @@ run-release: release
 
 clean:
 	cargo clean
+
+test:
+	cargo test
