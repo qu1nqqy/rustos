@@ -5,14 +5,18 @@
 #![reexport_test_harness_main = "test_main"]
 #![feature(abi_x86_interrupt)]
 
-// bootloader линкуется bootimage'ем, в коде он явно не используется
+// bootloader должен линковаться и в образы из tests/, которые не используют
+// entry_point! и объявляют _start сами
 extern crate bootloader as _;
 
 pub mod gdt;
 pub mod interrupts;
+pub mod memory;
 pub mod serial;
 pub mod vga_buffer;
 
+#[cfg(test)]
+use bootloader::{BootInfo, entry_point};
 use core::panic::PanicInfo;
 
 pub fn init() {
@@ -76,12 +80,15 @@ pub fn test_panic_handler(info: &PanicInfo) -> ! {
     hlt_loop();
 }
 
-/// Entry point for `cargo test`
+// Точка входа для `cargo test --lib`. entry_point! проверяет сигнатуру
+// функции и сам объявляет _start
 #[cfg(test)]
-#[unsafe(no_mangle)]
-pub extern "C" fn _start() -> ! {
+entry_point!(test_kernel_main);
+
+#[cfg(test)]
+fn test_kernel_main(_boot_info: &'static BootInfo) -> ! {
     // init() здесь не вызывается: unit-тесты не меняют состояние CPU,
-    // загрузка GDT/IDT и прерывания проверяются в tests/ (см. testing.md)
+    // загрузка GDT/IDT, прерывания и таблицы страниц проверяются в tests/ (см. testing.md)
     test_main();
     hlt_loop();
 }
