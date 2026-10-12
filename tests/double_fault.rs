@@ -8,13 +8,21 @@ use rustos::{QemuExitCode, exit_qemu, serial_print, serial_println};
 
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
-    serial_print!("double_fault::page_fault_without_handler...\t");
+    serial_print!("double_fault::divide_error_without_handler...\t");
 
     rustos::init();
-    // адрес не отображён в память: page fault, обработчика для него нет,
-    // поэтому CPU вызывает обработчик double fault
+    // деление на ноль: у divide error нет обработчика, при попытке его вызвать
+    // CPU получает ещё одно исключение и вызывает обработчик double fault.
+    // Page fault для этого не подходит: у него теперь есть свой обработчик.
+    // Деление через asm, потому что в Rust деление на ноль - паника, а не исключение
     unsafe {
-        *(0xdeadbeef as *mut u8) = 42;
+        core::arch::asm!(
+            "xor edx, edx",
+            "div ecx",
+            in("ecx") 0,
+            inout("eax") 1 => _,
+            out("edx") _,
+        );
     }
 
     serial_println!("[test did not panic]");

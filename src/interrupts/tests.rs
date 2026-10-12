@@ -17,6 +17,12 @@ fn test_double_fault_handler_registered() {
 }
 
 #[test_case]
+fn test_page_fault_handler_registered() {
+    let expected = VirtAddr::from_ptr(page_fault_handler as *const ());
+    assert_eq!(IDT.page_fault.handler_addr(), expected);
+}
+
+#[test_case]
 fn test_pic_offsets_after_cpu_exceptions() {
     // векторы 0..32 заняты исключениями CPU, по 8 линий IRQ на каждый PIC
     assert_eq!(PIC_1_OFFSET, 32);
@@ -44,10 +50,10 @@ fn test_keyboard_handler_registered() {
 
 #[test_case]
 fn test_unhandled_exceptions_have_no_handler() {
-    // из исключений CPU обработчики есть только у breakpoint и double fault,
-    // остальные доходят до double fault
+    // из исключений CPU обработчики есть только у breakpoint, double fault
+    // и page fault, остальные доходят до double fault
     assert_eq!(IDT.divide_error.handler_addr(), VirtAddr::zero());
-    assert_eq!(IDT.page_fault.handler_addr(), VirtAddr::zero());
+    assert_eq!(IDT.invalid_opcode.handler_addr(), VirtAddr::zero());
     assert_eq!(
         IDT.general_protection_fault.handler_addr(),
         VirtAddr::zero()
