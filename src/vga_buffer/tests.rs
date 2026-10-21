@@ -9,7 +9,7 @@ use x86_64::instructions::interrupts;
 
 fn assert_row_eq(writer: &Writer, row: usize, expected: &[u8]) {
     for col in 0..BUFFER_WIDTH {
-        let actual = writer.buffer.chars[row][col].read().ascii_character;
+        let actual = writer.buffer.read(row, col).ascii_character;
         let expected = expected.get(col).copied().unwrap_or(b' ');
         assert_eq!(actual, expected, "row {}, col {}", row, col);
     }
@@ -115,7 +115,7 @@ fn test_written_char_uses_writer_color() {
     interrupts::without_interrupts(|| {
         let mut writer = WRITER.lock();
         writer.write_string("\nx");
-        let screen_char = writer.buffer.chars[BUFFER_HEIGHT - 1][0].read();
+        let screen_char = writer.buffer.read(BUFFER_HEIGHT - 1, 0);
         assert_eq!(screen_char.color_code, writer.color_code);
         writer.write_byte(b'\n');
     });

@@ -22,7 +22,7 @@ pub extern "C" fn _start() -> ! {
 fn stack_overflow() {
     stack_overflow();
     // volatile-чтение не даёт компилятору превратить рекурсию в цикл
-    volatile::Volatile::new(0).read();
+    let _ = volatile::VolatileRef::from_ref(&0).as_ptr().read();
 }
 
 // Переполнение стека -> page fault на guard page -> double fault.

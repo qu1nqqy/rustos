@@ -7,10 +7,26 @@
 // Нажатия клавиш эмулируются командой 0xD2 контроллера PS/2: она кладёт байт
 // в выходной буфер контроллера так, будто его прислала клавиатура, и поднимает
 // IRQ1. Дальше всё как с настоящей клавиатурой: обработчик ядра читает скан-код
-// из порта 0x60 и печатает символ на экран, откуда тест его и читает.
+// из порта 0x60 и кладёт его в очередь, задача print_keypresses достаёт его
+// и печатает символ на экран, откуда тест его и читает.
+//
+// Задача опрашивается вручную (без executor'а): так тест сам решает, когда
+// она выполняется, и видит, будит ли её прерывание
 
+extern crate alloc;
+
+mod common;
+
+use alloc::boxed::Box;
+use bootloader::{BootInfo, entry_point};
+use core::future::Future;
 use core::panic::PanicInfo;
+use core::pin::Pin;
+use core::sync::atomic::{AtomicBool, Ordering};
+use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 use rustos::println;
+use rustos::task::keyboard;
+use spin::Mutex;
 use x86_64::instructions::interrupts;
 use x86_64::instructions::port::Port;
 
@@ -29,17 +45,52 @@ const B_PRESSED: u8 = 0x30;
 const LSHIFT_PRESSED: u8 = 0x2a;
 const LSHIFT_RELEASED: u8 = 0xaa;
 
-#[unsafe(no_mangle)]
-pub extern "C" fn _start() -> ! {
-    rustos::init();
-    test_main();
+entry_point!(test_kernel_main);
 
+// ScancodeStream::new (внутри print_keypresses) можно вызвать только один раз,
+// поэтому задача одна на все тесты
+static PRINTER: Mutex<Option<Pin<Box<dyn Future<Output = ()> + Send>>>> = Mutex::new(None);
+static WOKEN: AtomicBool = AtomicBool::new(false);
+
+fn test_kernel_main(boot_info: &'static BootInfo) -> ! {
+    rustos::init();
+    // print_keypresses создаёт очередь скан-кодов в куче
+    common::init_heap(boot_info);
+
+    *PRINTER.lock() = Some(Box::pin(keyboard::print_keypresses()));
+    // первый опрос создаёт очередь; без неё обработчик выбрасывает скан-коды
+    assert!(poll_printer().is_pending());
+
+    test_main();
     rustos::hlt_loop();
 }
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     rustos::test_panic_handler(info)
+}
+
+/// Waker, который только запоминает, что задачу разбудили
+fn flag_waker() -> Waker {
+    fn clone(_: *const ()) -> RawWaker {
+        RawWaker::new(core::ptr::null(), &VTABLE)
+    }
+    fn wake(_: *const ()) {
+        WOKEN.store(true, Ordering::SeqCst);
+    }
+    fn drop(_: *const ()) {}
+    static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake, drop);
+
+    unsafe { Waker::from_raw(clone(core::ptr::null())) }
+}
+
+/// Опрашивает print_keypresses: она печатает все скан-коды из очереди
+/// и возвращает Pending, когда очередь опустеет
+fn poll_printer() -> Poll<()> {
+    let waker = flag_waker();
+    let mut context = Context::from_waker(&waker);
+    let mut printer = PRINTER.lock();
+    printer.as_mut().unwrap().as_mut().poll(&mut context)
 }
 
 fn status() -> u8 {
@@ -81,6 +132,8 @@ fn assert_typed(scancodes: &[u8], expected: &[u8]) {
     for &scancode in scancodes {
         press(scancode);
     }
+    // задача бесконечная: она никогда не завершается
+    assert!(poll_printer().is_pending());
     let (row, len) = last_row_without_timer_dots();
     assert_eq!(&row[..len], expected);
 }
@@ -108,4 +161,38 @@ fn test_shift_gives_uppercase() {
         &[LSHIFT_PRESSED, A_PRESSED, A_RELEASED, LSHIFT_RELEASED, A_PRESSED],
         b"LShiftAa",
     );
+}
+
+#[test_case]
+fn test_scancodes_wait_for_task() {
+    // обработчик прерывания только кладёт скан-код в очередь,
+    // пока задача не опрошена, на экране ничего нет
+    println!();
+    press(A_PRESSED);
+    let (_, len) = last_row_without_timer_dots();
+    assert_eq!(len, 0);
+
+    assert!(poll_printer().is_pending());
+    let (row, len) = last_row_without_timer_dots();
+    assert_eq!(&row[..len], b"a");
+}
+
+#[test_case]
+fn test_key_press_wakes_task() {
+    assert!(poll_printer().is_pending());
+    WOKEN.store(false, Ordering::SeqCst);
+    press(A_PRESSED);
+    assert!(WOKEN.load(Ordering::SeqCst));
+    assert!(poll_printer().is_pending());
+}
+
+#[test_case]
+fn test_no_wake_without_key_press() {
+    assert!(poll_printer().is_pending());
+    WOKEN.store(false, Ordering::SeqCst);
+    // ждём несколько прерываний таймера: они не должны будить задачу
+    for _ in 0..3 {
+        x86_64::instructions::hlt();
+    }
+    assert!(!WOKEN.load(Ordering::SeqCst));
 }
