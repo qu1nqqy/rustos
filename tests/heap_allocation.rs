@@ -76,6 +76,32 @@ fn test_many_boxes() {
 }
 
 #[test_case]
+fn test_many_boxes_long_lived() {
+    // одна аллокация живёт весь тест. Bump-аллокатор переиспользует память,
+    // только когда освобождено всё, поэтому с ним этот тест упадёт
+    let long_lived = Box::new(1);
+    for i in 0..HEAP_SIZE {
+        let x = Box::new(i);
+        assert_eq!(*x, i);
+    }
+    assert_eq!(*long_lived, 1);
+}
+
+#[test_case]
+fn test_mixed_sizes() {
+    // блоки разных размеров (и больше 2048 байт - через fallback-аллокатор)
+    // не должны перекрываться
+    let small = Box::new([1u8; 8]);
+    let medium = Box::new([2u8; 500]);
+    let large = Box::new([3u8; 4000]);
+    let small_2 = Box::new([4u8; 8]);
+    assert!(small.iter().all(|&b| b == 1));
+    assert!(medium.iter().all(|&b| b == 2));
+    assert!(large.iter().all(|&b| b == 3));
+    assert!(small_2.iter().all(|&b| b == 4));
+}
+
+#[test_case]
 fn test_freed_memory_reused() {
     let first = Box::new([0u8; 1024]);
     let addr = first.as_ptr() as usize;

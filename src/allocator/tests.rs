@@ -32,3 +32,29 @@ fn test_dummy_alloc_returns_null() {
     let ptr = unsafe { Dummy.alloc(layout) };
     assert!(ptr.is_null());
 }
+
+#[test_case]
+fn test_align_up_already_aligned() {
+    assert_eq!(align_up(0, 8), 0);
+    assert_eq!(align_up(0x1000, 4096), 0x1000);
+}
+
+#[test_case]
+fn test_align_up_rounds_up() {
+    assert_eq!(align_up(1, 8), 8);
+    assert_eq!(align_up(9, 8), 16);
+    assert_eq!(align_up(0x1001, 4096), 0x2000);
+}
+
+#[test_case]
+fn test_align_up_align_one() {
+    // выравнивание 1 ничего не меняет
+    assert_eq!(align_up(13, 1), 13);
+}
+
+#[test_case]
+fn test_locked_gives_mutable_access() {
+    let locked = Locked::new(1);
+    *locked.lock() += 1;
+    assert_eq!(*locked.lock(), 2);
+}
