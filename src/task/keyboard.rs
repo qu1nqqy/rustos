@@ -7,7 +7,7 @@ use core::{
 use crossbeam_queue::ArrayQueue;
 use futures_util::stream::{Stream, StreamExt};
 use futures_util::task::AtomicWaker;
-use pc_keyboard::{DecodedKey, HandleControl, Keyboard, ScancodeSet1, layouts};
+use pc_keyboard::{DecodedKey, HandleControl, PS2Keyboard, ScancodeSet1, layouts};
 
 // Очередь создаётся в ScancodeStream::new, а не в static напрямую: ArrayQueue
 // выделяет память в куче, а в обработчике прерывания этого делать нельзя
@@ -73,7 +73,7 @@ impl Stream for ScancodeStream {
 /// Задача, которая печатает нажатые клавиши
 pub async fn print_keypresses() {
     let mut scancodes = ScancodeStream::new();
-    let mut keyboard = Keyboard::new(
+    let mut keyboard = PS2Keyboard::new(
         ScancodeSet1::new(),
         layouts::Us104Key,
         HandleControl::Ignore,

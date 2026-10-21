@@ -43,7 +43,7 @@ fn panic(info: &PanicInfo) -> ! {
 }
 
 fn boot_info() -> &'static BootInfo {
-    BOOT_INFO.r#try().expect("BOOT_INFO не инициализирован")
+    BOOT_INFO.get().expect("BOOT_INFO не инициализирован")
 }
 
 fn phys_mem_offset() -> VirtAddr {

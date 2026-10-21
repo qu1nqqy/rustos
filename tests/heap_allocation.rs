@@ -140,7 +140,7 @@ fn test_too_large_allocation_fails() {
 #[test_case]
 fn test_heap_pages_mapped() {
     // init_heap отображает ровно страницы [HEAP_START, HEAP_START + HEAP_SIZE)
-    let offset = VirtAddr::new(BOOT_INFO.r#try().unwrap().physical_memory_offset);
+    let offset = VirtAddr::new(BOOT_INFO.get().unwrap().physical_memory_offset);
     let (level_4_frame, _) = Cr3::read();
     let table = (offset + level_4_frame.start_address().as_u64()).as_mut_ptr::<PageTable>();
     let mapper = unsafe { OffsetPageTable::new(&mut *table, offset) };
