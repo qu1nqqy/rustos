@@ -62,3 +62,7 @@ harness = false
 [[test]]
 name = "heap_oom"
 harness = false
+
+[[test]]
+name = "executor"
+harness = false

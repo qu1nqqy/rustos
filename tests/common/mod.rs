@@ -46,3 +46,31 @@ pub fn init_heap(boot_info: &'static BootInfo) {
         unsafe { memory::BootInfoFrameAllocator::init(&boot_info.memory_map) };
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
 }
+
+/// Future, который один раз возвращает Pending, сразу разбудив себя.
+/// Так задача уступает executor'у очередь, как `yield` в генераторе Python
+pub struct YieldNow {
+    yielded: bool,
+}
+
+impl core::future::Future for YieldNow {
+    type Output = ();
+
+    fn poll(
+        mut self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context,
+    ) -> core::task::Poll<()> {
+        if self.yielded {
+            core::task::Poll::Ready(())
+        } else {
+            self.yielded = true;
+            cx.waker().wake_by_ref();
+            core::task::Poll::Pending
+        }
+    }
+}
+
+#[allow(dead_code)]
+pub fn yield_now() -> YieldNow {
+    YieldNow { yielded: false }
+}
