@@ -1,12 +1,16 @@
 use alloc::alloc::{GlobalAlloc, Layout};
 use core::ptr::null_mut;
-use linked_list_allocator::LockedHeap;
+use fixed_size_block::FixedSizeBlockAllocator;
 use x86_64::{
     VirtAddr,
     structures::paging::{
         FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB, mapper::MapToError,
     },
 };
+
+pub mod bump;
+pub mod fixed_size_block;
+pub mod linked_list;
 
 // Куча - отдельная область виртуальной памяти. Адрес выбран так, чтобы
 // его было легко узнать в отладчике и он не пересекался с другими отображениями
@@ -27,9 +31,11 @@ unsafe impl GlobalAlloc for Dummy {
 }
 
 // Через #[global_allocator] работают Box, Vec и остальные типы из alloc.
-// До init_heap куча пустая, и любая аллокация завершится ошибкой
+// До init_heap куча пустая, и любая аллокация завершится ошибкой.
+// Вместо FixedSizeBlockAllocator можно подставить
+// Locked<bump::BumpAllocator> или Locked<linked_list::LinkedListAllocator>
 #[global_allocator]
-static ALLOCATOR: LockedHeap = LockedHeap::empty();
+static ALLOCATOR: Locked<FixedSizeBlockAllocator> = Locked::new(FixedSizeBlockAllocator::new());
 
 /// Отображает страницы кучи на свободные фреймы и инициализирует аллокатор
 pub fn init_heap(
@@ -55,10 +61,35 @@ pub fn init_heap(
     // unsafe: страницы кучи только что отображены и больше ничем не используются,
     // а init вызывается один раз
     unsafe {
-        ALLOCATOR.lock().init(HEAP_START as *mut u8, HEAP_SIZE);
+        ALLOCATOR.lock().init(HEAP_START, HEAP_SIZE);
     }
 
     Ok(())
+}
+
+/// Обёртка над spin::Mutex. Методы GlobalAlloc принимают &self, а мьютекс
+/// даёт изменяемый доступ к аллокатору. Реализовать GlobalAlloc прямо для
+/// spin::Mutex<A> нельзя: и трейт, и тип объявлены в других крейтах
+pub struct Locked<A> {
+    inner: spin::Mutex<A>,
+}
+
+impl<A> Locked<A> {
+    pub const fn new(inner: A) -> Self {
+        Locked {
+            inner: spin::Mutex::new(inner),
+        }
+    }
+
+    pub fn lock(&self) -> spin::MutexGuard<'_, A> {
+        self.inner.lock()
+    }
+}
+
+/// Выравнивает `addr` вверх до `align`. `align` должен быть степенью двойки:
+/// тогда `!(align - 1)` - маска, которая обнуляет младшие биты
+fn align_up(addr: usize, align: usize) -> usize {
+    (addr + align - 1) & !(align - 1)
 }
 
 #[cfg(test)]
