@@ -8,7 +8,10 @@
 // bootloader должен линковаться и в образы из tests/, которые не используют
 // entry_point! и объявляют _start сами
 extern crate bootloader as _;
+// крейт alloc (Box, Vec, Rc...) не подключается в no_std автоматически
+extern crate alloc;
 
+pub mod allocator;
 pub mod gdt;
 pub mod interrupts;
 pub mod memory;
