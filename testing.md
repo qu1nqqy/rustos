@@ -57,20 +57,24 @@ cargo test ──► сборка тестового образа ──► boot
 
 ```
 src/
-├── lib.rs            ← в конце: #[cfg(test)] mod tests;
-├── tests.rs          ← тесты lib.rs
-├── vga_buffer.rs     ← в конце: #[cfg(test)] mod tests;
-├── vga_buffer/
-│   └── tests.rs      ← тесты vga_buffer
-├── serial.rs
-├── serial/
-│   └── tests.rs
-├── allocator.rs
-└── allocator/
-    ├── tests.rs      ← тесты allocator
-    ├── bump.rs       ← в конце: #[cfg(test)] mod tests;
-    └── bump/
-        └── tests.rs  ← тесты allocator::bump (так же linked_list, fixed_size_block)
+├── lib.rs                ← в конце: #[cfg(test)] mod tests;
+├── tests.rs              ← тесты lib.rs
+├── drivers.rs            ← только объявления подмодулей, своих тестов нет
+├── drivers/
+│   ├── vga.rs            ← в конце: #[cfg(test)] mod tests;
+│   ├── vga/
+│   │   └── tests.rs      ← тесты drivers::vga
+│   ├── serial.rs
+│   └── serial/
+│       └── tests.rs
+├── mm.rs
+└── mm/
+    ├── allocator.rs
+    └── allocator/
+        ├── tests.rs      ← тесты mm::allocator
+        ├── bump.rs       ← в конце: #[cfg(test)] mod tests;
+        └── bump/
+            └── tests.rs  ← тесты mm::allocator::bump (так же linked_list, fixed_size_block)
 ```
 
 `tests` — дочерний модуль тестируемого модуля, поэтому через `use super::*;`
@@ -93,28 +97,28 @@ src/
 
 Сейчас покрыто:
 
-- `vga_buffer`: кодирование цвета, раскладка структур в памяти (должна совпадать
+- `drivers::vga`: кодирование цвета, раскладка структур в памяти (должна совпадать
   с текстовым VGA-буфером), вывод строки, перенос длинной строки, сброс колонки
   после `\n`, прокрутка экрана, замена не-ASCII байтов на `■` (`0xfe`), цвет
   записанных символов, «стресс» из 200 строк;
-- `serial`: вывод через последовательный порт с форматированием;
+- `drivers::serial`: вывод через последовательный порт с форматированием;
 - `lib`: соответствие `QemuExitCode::Success` значению `test-success-exit-code`;
-- `interrupts`: в IDT зарегистрированы обработчики breakpoint, double fault,
+- `arch::x86_64::interrupts`: в IDT зарегистрированы обработчики breakpoint, double fault,
   page fault, таймера и клавиатуры, у остальных исключений обработчиков пока нет; смещения
   PIC идут сразу после 32 исключений CPU, а `InterruptIndex` совпадает с линиями IRQ;
-- `gdt`: в TSS задан стек для double fault (IST), остальные записи IST пустые;
+- `arch::x86_64::gdt`: в TSS задан стек для double fault (IST), остальные записи IST пустые;
   раскладка GDT (код ядра, TSS) и уровень привилегий селекторов (ring 0);
-- `memory`: `BootInfoFrameAllocator` на выдуманной карте памяти: выдаёт фреймы
+- `mm::paging`: `BootInfoFrameAllocator` на выдуманной карте памяти: выдаёт фреймы
   только из `Usable`-регионов, по порядку и с шагом 4 KiB, возвращает `None`,
   когда фреймы кончились;
-- `allocator`: адрес и размер кучи (выровнены по страницам, адрес канонический),
+- `mm::allocator`: адрес и размер кучи (выровнены по страницам, адрес канонический),
   `Dummy` всегда возвращает null, `align_up`, `Locked`;
-- `allocator::bump`: аллокации идут подряд с учётом выравнивания, null при
+- `mm::allocator::bump`: аллокации идут подряд с учётом выравнивания, null при
   нехватке памяти, память переиспользуется только после освобождения всех аллокаций;
-- `allocator::linked_list`: `size_align` подгоняет layout под `ListNode`, аллокация
+- `mm::allocator::linked_list`: `size_align` подгоняет layout под `ListNode`, аллокация
   делит регион, освобождённый регион попадает в начало списка и переиспользуется,
   слишком маленькие регионы и остатки меньше `ListNode` пропускаются;
-- `allocator::fixed_size_block`: выбор списка по размеру и выравниванию
+- `mm::allocator::fixed_size_block`: выбор списка по размеру и выравниванию
   (`list_index`), блоки выровнены по своему размеру, освобождённые блоки
   выдаются повторно (LIFO), списки разных размеров не смешиваются, большие
   аллокации идут через fallback-аллокатор;
@@ -153,7 +157,7 @@ src/
   прямо из VGA-памяти (`0xb8000`), отбрасывая точки от обработчика таймера.
   Если обработчик не сработает, CPU уйдёт в triple fault, и тест упадёт
   (QEMU запускается с `-no-reboot`).
-- `paging.rs`: ручная трансляция адресов `memory::translate_addr` (VGA-буфер
+- `paging.rs`: ручная трансляция адресов `paging::translate_addr` (VGA-буфер
   отображён один к одному, смещение внутри страницы сохраняется, нулевая страница
   не отображена, результат совпадает с `OffsetPageTable`); область
   `physical_memory_offset` отображена на физическую память; настоящий
@@ -223,7 +227,7 @@ double fault, а не любая другая), `panic_handler` проверяе
    В интеграционных тестах с `rustos::init()` таймер тоже печатает `.`, поэтому
    проверка экрана должна их пропускать (см. `tests/keyboard.rs`).
 2. **Для сравнения строк на экране использовать `assert_row_eq`**
-   (`src/vga_buffer/tests.rs`). Функция проверяет строку целиком, включая пробелы
+   (`src/drivers/vga/tests.rs`). Функция проверяет строку целиком, включая пробелы
    после текста, и в сообщении об ошибке указывает строку и колонку.
 3. **Один тест проверяет одно поведение**, а имя говорит, что именно
    (`test_long_line_wraps`, а не `test_vga_2`).
