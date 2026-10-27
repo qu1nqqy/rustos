@@ -4,7 +4,7 @@
 use bootloader::BootInfo;
 use core::fmt::{self, Write};
 use core::panic::PanicInfo;
-use rustos::{allocator, memory};
+use rustos::mm::{allocator, paging};
 use x86_64::VirtAddr;
 
 /// Проверяет, что сообщение паники начинается с `prefix`, не выделяя память:
@@ -37,13 +37,13 @@ pub fn panic_message_starts_with(info: &PanicInfo, prefix: &str) -> bool {
 }
 
 /// Инициализирует кучу так же, как kernel_main в main.rs.
-/// Вызывать один раз: `memory::init` нельзя вызывать повторно
+/// Вызывать один раз: `paging::init` нельзя вызывать повторно
 #[allow(dead_code)] // нужна не всем тестам, которые подключают common
 pub fn init_heap(boot_info: &'static BootInfo) {
     let phys_mem_offset = VirtAddr::new(boot_info.physical_memory_offset);
-    let mut mapper = unsafe { memory::init(phys_mem_offset) };
+    let mut mapper = unsafe { paging::init(phys_mem_offset) };
     let mut frame_allocator =
-        unsafe { memory::BootInfoFrameAllocator::init(&boot_info.memory_map) };
+        unsafe { paging::BootInfoFrameAllocator::init(&boot_info.memory_map) };
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
 }
 

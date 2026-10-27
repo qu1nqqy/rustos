@@ -8,10 +8,11 @@ extern crate alloc;
 
 use bootloader::{BootInfo, entry_point};
 use core::panic::PanicInfo;
-use rustos::allocator;
-use rustos::memory::{self, BootInfoFrameAllocator};
+use rustos::drivers::keyboard;
+use rustos::mm::allocator;
+use rustos::mm::paging::{self, BootInfoFrameAllocator};
 use rustos::println;
-use rustos::task::{Task, executor::Executor, keyboard};
+use rustos::task::{Task, executor::Executor};
 use x86_64::VirtAddr;
 
 // entry_point! проверяет сигнатуру kernel_main и сам объявляет _start,
@@ -23,7 +24,7 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     rustos::init();
 
     let phys_mem_offset = VirtAddr::new(boot_info.physical_memory_offset);
-    let mut mapper = unsafe { memory::init(phys_mem_offset) };
+    let mut mapper = unsafe { paging::init(phys_mem_offset) };
     let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(&boot_info.memory_map) };
 
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");

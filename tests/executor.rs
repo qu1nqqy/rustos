@@ -10,7 +10,8 @@ use common::yield_now;
 use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use futures_util::stream::StreamExt;
-use rustos::task::{Task, executor::Executor, keyboard::ScancodeStream};
+use rustos::drivers::keyboard::ScancodeStream;
+use rustos::task::{Task, executor::Executor};
 use rustos::{QemuExitCode, exit_qemu, serial_print, serial_println};
 use x86_64::instructions::port::Port;
 
