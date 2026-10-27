@@ -11,29 +11,19 @@ extern crate bootloader as _;
 // крейт alloc (Box, Vec, Rc...) не подключается в no_std автоматически
 extern crate alloc;
 
-pub mod allocator;
-pub mod gdt;
-pub mod interrupts;
-pub mod memory;
-pub mod serial;
+pub mod arch;
+pub mod drivers;
+pub mod mm;
 pub mod task;
-pub mod vga_buffer;
+
+pub use arch::x86_64::hlt_loop;
 
 #[cfg(test)]
 use bootloader::{BootInfo, entry_point};
 use core::panic::PanicInfo;
 
 pub fn init() {
-    gdt::init();
-    interrupts::init_idt();
-    unsafe { interrupts::PICS.lock().initialize() };
-    x86_64::instructions::interrupts::enable();
-}
-
-pub fn hlt_loop() -> ! {
-    loop {
-        x86_64::instructions::hlt();
-    }
+    arch::x86_64::init();
 }
 
 // Инфраструктура для тестов, общая для unit- и интеграционных тестов

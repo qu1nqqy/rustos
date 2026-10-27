@@ -24,8 +24,8 @@ use core::panic::PanicInfo;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+use rustos::drivers::keyboard;
 use rustos::println;
-use rustos::task::keyboard;
 use spin::Mutex;
 use x86_64::instructions::interrupts;
 use x86_64::instructions::port::Port;
@@ -158,7 +158,13 @@ fn test_shift_gives_uppercase() {
     // pc-keyboard отдаёт нажатие Shift как RawKey(LShift),
     // и обработчик печатает его название через {:?}
     assert_typed(
-        &[LSHIFT_PRESSED, A_PRESSED, A_RELEASED, LSHIFT_RELEASED, A_PRESSED],
+        &[
+            LSHIFT_PRESSED,
+            A_PRESSED,
+            A_RELEASED,
+            LSHIFT_RELEASED,
+            A_PRESSED,
+        ],
         b"LShiftAa",
     );
 }

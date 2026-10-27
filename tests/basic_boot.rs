@@ -32,5 +32,5 @@ fn test_serial_println() {
 #[test_case]
 fn test_vga_writer_available() {
     // WRITER инициализируется лениво, первая блокировка не должна паниковать
-    let _writer = rustos::vga_buffer::WRITER.lock();
+    let _writer = rustos::drivers::vga::WRITER.lock();
 }

@@ -11,7 +11,7 @@ mod common;
 use alloc::{boxed::Box, format, rc::Rc, string::String, vec::Vec};
 use bootloader::{BootInfo, entry_point};
 use core::panic::PanicInfo;
-use rustos::allocator::{HEAP_SIZE, HEAP_START};
+use rustos::mm::allocator::{HEAP_SIZE, HEAP_START};
 use spin::Once;
 use x86_64::structures::paging::{OffsetPageTable, PageTable, Translate};
 use x86_64::{VirtAddr, registers::control::Cr3};

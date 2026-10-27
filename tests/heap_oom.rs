@@ -8,7 +8,7 @@ mod common;
 use alloc::vec::Vec;
 use bootloader::{BootInfo, entry_point};
 use core::panic::PanicInfo;
-use rustos::allocator::HEAP_SIZE;
+use rustos::mm::allocator::HEAP_SIZE;
 use rustos::{QemuExitCode, exit_qemu, serial_print, serial_println};
 
 entry_point!(test_kernel_main);

@@ -7,7 +7,7 @@
 use bootloader::bootinfo::MemoryRegionType;
 use bootloader::{BootInfo, entry_point};
 use core::panic::PanicInfo;
-use rustos::memory::{self, BootInfoFrameAllocator};
+use rustos::mm::paging::{self, BootInfoFrameAllocator};
 use spin::{Mutex, Once};
 use x86_64::structures::paging::{
     FrameAllocator, OffsetPageTable, Page, PhysFrame, Size4KiB, Translate,
@@ -21,15 +21,14 @@ use x86_64::{PhysAddr, VirtAddr};
 entry_point!(test_kernel_main);
 
 static BOOT_INFO: Once<&'static BootInfo> = Once::new();
-// memory::init можно вызвать только один раз, поэтому mapper и аллокатор
+// paging::init можно вызвать только один раз, поэтому mapper и аллокатор
 // создаются в test_kernel_main и общие для всех тестов
-static PAGING: Mutex<Option<(OffsetPageTable<'static>, BootInfoFrameAllocator)>> =
-    Mutex::new(None);
+static PAGING: Mutex<Option<(OffsetPageTable<'static>, BootInfoFrameAllocator)>> = Mutex::new(None);
 
 fn test_kernel_main(boot_info: &'static BootInfo) -> ! {
     BOOT_INFO.call_once(|| boot_info);
 
-    let mapper = unsafe { memory::init(phys_mem_offset()) };
+    let mapper = unsafe { paging::init(phys_mem_offset()) };
     let frame_allocator = unsafe { BootInfoFrameAllocator::init(&boot_info.memory_map) };
     *PAGING.lock() = Some((mapper, frame_allocator));
 
@@ -51,7 +50,7 @@ fn phys_mem_offset() -> VirtAddr {
 }
 
 fn translate(addr: u64) -> Option<PhysAddr> {
-    unsafe { memory::translate_addr(VirtAddr::new(addr), phys_mem_offset()) }
+    unsafe { paging::translate_addr(VirtAddr::new(addr), phys_mem_offset()) }
 }
 
 #[test_case]
@@ -84,11 +83,7 @@ fn test_translate_matches_offset_page_table() {
     // ручная трансляция должна совпадать с реализацией из крейта x86_64
     let paging = PAGING.lock();
     let (mapper, _) = paging.as_ref().unwrap();
-    let addresses = [
-        0xb8000,
-        test_kernel_main as *const () as u64,
-        0,
-    ];
+    let addresses = [0xb8000, test_kernel_main as *const () as u64, 0];
     for &addr in &addresses {
         let virt = VirtAddr::new(addr);
         assert_eq!(translate(addr), mapper.translate_addr(virt));
@@ -99,7 +94,7 @@ fn test_translate_matches_offset_page_table() {
 fn test_physical_memory_offset_mapping() {
     // physical_memory_offset + X отображается на физический адрес X.
     // Bootloader отображает физическую память страницами по 2 MiB (huge pages),
-    // а ручная memory::translate_addr их не поддерживает и паникует,
+    // а ручная paging::translate_addr их не поддерживает и паникует,
     // поэтому здесь трансляцию делает OffsetPageTable
     let paging = PAGING.lock();
     let (mapper, _) = paging.as_ref().unwrap();
@@ -145,7 +140,7 @@ fn test_create_example_mapping() {
     {
         let mut paging = PAGING.lock();
         let (mapper, frame_allocator) = paging.as_mut().unwrap();
-        memory::create_example_mapping(page, mapper, frame_allocator);
+        paging::create_example_mapping(page, mapper, frame_allocator);
     }
 
     let vga = PhysAddr::new(0xb8000);

@@ -1,4 +1,5 @@
-use crate::{gdt, hlt_loop, print, println};
+use super::gdt;
+use crate::{hlt_loop, print, println};
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;
 use spin;
@@ -81,10 +82,10 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
     use x86_64::instructions::port::Port;
 
     // обработчик только кладёт скан-код в очередь, а разбирает и печатает
-    // его асинхронная задача task::keyboard::print_keypresses
+    // его асинхронная задача drivers::keyboard::print_keypresses
     let mut port = Port::new(0x60);
     let scancode: u8 = unsafe { port.read() };
-    crate::task::keyboard::add_scancode(scancode);
+    crate::drivers::keyboard::add_scancode(scancode);
 
     unsafe {
         PICS.lock()
