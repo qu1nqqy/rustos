@@ -158,7 +158,13 @@ fn test_shift_gives_uppercase() {
     // pc-keyboard отдаёт нажатие Shift как RawKey(LShift),
     // и обработчик печатает его название через {:?}
     assert_typed(
-        &[LSHIFT_PRESSED, A_PRESSED, A_RELEASED, LSHIFT_RELEASED, A_PRESSED],
+        &[
+            LSHIFT_PRESSED,
+            A_PRESSED,
+            A_RELEASED,
+            LSHIFT_RELEASED,
+            A_PRESSED,
+        ],
         b"LShiftAa",
     );
 }

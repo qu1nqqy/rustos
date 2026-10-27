@@ -69,7 +69,13 @@ fn test_list_index_none_for_large_allocations() {
 #[test_case]
 fn test_lists_empty_after_new() {
     let allocator = test_allocator();
-    assert!(allocator.lock().list_heads.iter().all(|head| head.is_none()));
+    assert!(
+        allocator
+            .lock()
+            .list_heads
+            .iter()
+            .all(|head| head.is_none())
+    );
 }
 
 #[test_case]
@@ -129,7 +135,13 @@ fn test_large_allocation_uses_fallback() {
         assert!(in_heap(ptr));
         allocator.dealloc(ptr, layout(4096, 8));
         // большой блок возвращается fallback-аллокатору, а не в списки
-        assert!(allocator.lock().list_heads.iter().all(|head| head.is_none()));
+        assert!(
+            allocator
+                .lock()
+                .list_heads
+                .iter()
+                .all(|head| head.is_none())
+        );
         assert_eq!(allocator.alloc(layout(4096, 8)), ptr);
     }
 }

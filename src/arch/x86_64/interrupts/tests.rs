@@ -45,7 +45,10 @@ fn test_timer_handler_registered() {
 #[test_case]
 fn test_keyboard_handler_registered() {
     let expected = VirtAddr::from_ptr(keyboard_interrupt_handler as *const ());
-    assert_eq!(IDT[InterruptIndex::Keyboard.as_u8()].handler_addr(), expected);
+    assert_eq!(
+        IDT[InterruptIndex::Keyboard.as_u8()].handler_addr(),
+        expected
+    );
 }
 
 #[test_case]

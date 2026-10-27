@@ -23,8 +23,7 @@ entry_point!(test_kernel_main);
 static BOOT_INFO: Once<&'static BootInfo> = Once::new();
 // paging::init можно вызвать только один раз, поэтому mapper и аллокатор
 // создаются в test_kernel_main и общие для всех тестов
-static PAGING: Mutex<Option<(OffsetPageTable<'static>, BootInfoFrameAllocator)>> =
-    Mutex::new(None);
+static PAGING: Mutex<Option<(OffsetPageTable<'static>, BootInfoFrameAllocator)>> = Mutex::new(None);
 
 fn test_kernel_main(boot_info: &'static BootInfo) -> ! {
     BOOT_INFO.call_once(|| boot_info);
@@ -84,11 +83,7 @@ fn test_translate_matches_offset_page_table() {
     // ручная трансляция должна совпадать с реализацией из крейта x86_64
     let paging = PAGING.lock();
     let (mapper, _) = paging.as_ref().unwrap();
-    let addresses = [
-        0xb8000,
-        test_kernel_main as *const () as u64,
-        0,
-    ];
+    let addresses = [0xb8000, test_kernel_main as *const () as u64, 0];
     for &addr in &addresses {
         let virt = VirtAddr::new(addr);
         assert_eq!(translate(addr), mapper.translate_addr(virt));

@@ -19,7 +19,10 @@ fn assert_row_eq(writer: &Writer, row: usize, expected: &[u8]) {
 fn test_color_code_encoding() {
     // старшие 4 бита - фон, младшие - цвет символа
     assert_eq!(ColorCode::new(Color::Yellow, Color::Blue), ColorCode(0x1e));
-    assert_eq!(ColorCode::new(Color::LightGreen, Color::Black), ColorCode(0x0a));
+    assert_eq!(
+        ColorCode::new(Color::LightGreen, Color::Black),
+        ColorCode(0x0a)
+    );
     assert_eq!(ColorCode::new(Color::White, Color::White), ColorCode(0xff));
 }
 
