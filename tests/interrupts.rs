@@ -5,6 +5,8 @@
 #![reexport_test_harness_main = "test_main"]
 
 use core::panic::PanicInfo;
+use rustos::time::ticks;
+use rustos::{print, println};
 use x86_64::PrivilegeLevel;
 use x86_64::instructions::segmentation::{CS, Segment};
 
@@ -74,10 +76,49 @@ fn test_timer_interrupt_arrives() {
 }
 
 #[test_case]
-fn test_println_no_deadlock_with_timer() {
-    // обработчик таймера печатает '.', поэтому если println! возьмёт
-    // WRITER с включёнными прерываниями, рано или поздно будет deadlock
-    for i in 0..1000 {
-        rustos::println!("test_println_no_deadlock_with_timer {}", i);
+fn test_timer_interrupt_counts_ticks() {
+    // других источников прерываний в тесте нет, поэтому каждый hlt
+    // заканчивается прерыванием таймера
+    let before = ticks();
+    for _ in 0..3 {
+        x86_64::instructions::hlt();
     }
+    assert!(ticks() >= before + 3);
+}
+
+#[test_case]
+fn test_timer_handler_prints_nothing() {
+    // раньше обработчик таймера печатал '.', теперь только считает тики
+    print!("\ntimer_marker");
+    for _ in 0..3 {
+        x86_64::instructions::hlt();
+    }
+    let (row, len) = last_vga_row();
+    assert_eq!(&row[..len], b"timer_marker");
+}
+
+#[test_case]
+fn test_println_no_deadlock_with_interrupts() {
+    // println! вызывают и обработчики прерываний (breakpoint, page fault),
+    // поэтому если он возьмёт WRITER с включёнными прерываниями,
+    // рано или поздно будет deadlock
+    for i in 0..1000 {
+        println!("test_println_no_deadlock_with_interrupts {}", i);
+        if i % 100 == 0 {
+            x86_64::instructions::interrupts::int3();
+        }
+    }
+}
+
+/// Последняя строка экрана без пробелов в конце
+fn last_vga_row() -> ([u8; 80], usize) {
+    const VGA_BUFFER: *const u16 = 0xb8000 as *const u16;
+    let mut row = [0; 80];
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        for (col, byte) in row.iter_mut().enumerate() {
+            *byte = unsafe { VGA_BUFFER.add(24 * 80 + col).read_volatile() } as u8;
+        }
+    });
+    let len = row.iter().rposition(|&b| b != b' ').map_or(0, |i| i + 1);
+    (row, len)
 }
