@@ -12,9 +12,11 @@ extern crate bootloader as _;
 extern crate alloc;
 
 pub mod arch;
+pub mod console;
 pub mod drivers;
 pub mod mm;
 pub mod task;
+pub mod time;
 
 pub use arch::x86_64::hlt_loop;
 

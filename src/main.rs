@@ -20,6 +20,7 @@ use x86_64::VirtAddr;
 entry_point!(kernel_main);
 
 fn kernel_main(boot_info: &'static BootInfo) -> ! {
+    rustos::console::enable_serial();
     println!("Hello World{}", "!");
     rustos::init();
 

@@ -1,6 +1,8 @@
 pub mod gdt;
 pub mod interrupts;
 
+pub use x86_64::instructions::interrupts::without_interrupts;
+
 /// Загружает GDT, TSS и IDT, настраивает PIC и включает прерывания
 pub fn init() {
     gdt::init();
