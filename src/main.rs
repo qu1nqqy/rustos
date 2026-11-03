@@ -8,11 +8,12 @@ extern crate alloc;
 
 use bootloader::{BootInfo, entry_point};
 use core::panic::PanicInfo;
-use rustos::drivers::keyboard;
+use futures_util::stream::StreamExt;
 use rustos::mm::allocator;
 use rustos::mm::paging::{self, BootInfoFrameAllocator};
-use rustos::println;
 use rustos::task::{Task, executor::Executor};
+use rustos::tty::{self, Key};
+use rustos::{print, println};
 use x86_64::VirtAddr;
 
 // entry_point! проверяет сигнатуру kernel_main и сам объявляет _start,
@@ -20,6 +21,7 @@ use x86_64::VirtAddr;
 entry_point!(kernel_main);
 
 fn kernel_main(boot_info: &'static BootInfo) -> ! {
+    // дублируем вывод в serial: с -serial stdio он попадает в терминал хоста
     rustos::console::enable_serial();
     println!("Hello World{}", "!");
     rustos::init();
@@ -35,7 +37,7 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
 
     let mut executor = Executor::new();
     executor.spawn(Task::new(example_task()));
-    executor.spawn(Task::new(keyboard::print_keypresses()));
+    executor.spawn(Task::new(echo_keys()));
     executor.run();
 }
 
@@ -46,6 +48,18 @@ async fn async_number() -> u32 {
 async fn example_task() {
     let number = async_number().await;
     println!("async number: {}", number);
+}
+
+/// Печатает нажатые клавиши: символы как есть, остальные клавиши по имени
+async fn echo_keys() {
+    let mut keys = tty::keys();
+    while let Some(key) = keys.next().await {
+        match key {
+            Key::Char(c) => print!("{}", c),
+            Key::Enter => println!(),
+            other => print!("<{:?}>", other),
+        }
+    }
 }
 
 /// This function is called on panic.

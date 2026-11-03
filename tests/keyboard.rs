@@ -4,62 +4,44 @@
 #![test_runner(rustos::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
-// Нажатия клавиш эмулируются командой 0xD2 контроллера PS/2: она кладёт байт
-// в выходной буфер контроллера так, будто его прислала клавиатура, и поднимает
-// IRQ1. Дальше всё как с настоящей клавиатурой: обработчик ядра читает скан-код
-// из порта 0x60 и кладёт его в очередь, задача print_keypresses достаёт его
-// и печатает символ на экран, откуда тест его и читает.
+// Нажатия клавиш эмулируются через контроллер PS/2 (см. common::press_key).
+// Дальше всё как с настоящей клавиатурой: обработчик ядра читает скан-код
+// из порта 0x60 и кладёт его в очередь, откуда его достаёт поток scancodes().
 //
-// Задача опрашивается вручную (без executor'а): так тест сам решает, когда
-// она выполняется, и видит, будит ли её прерывание
+// Поток опрашивается вручную (без executor'а): так тест сам решает, когда
+// его читать, и видит, будит ли его прерывание
 
 extern crate alloc;
 
 mod common;
 
-use alloc::boxed::Box;
 use bootloader::{BootInfo, entry_point};
-use core::future::Future;
+use common::press_key;
 use core::panic::PanicInfo;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+use futures_util::stream::Stream;
 use rustos::drivers::keyboard;
-use rustos::println;
+use rustos::task::queue::QueueStream;
 use spin::Mutex;
-use x86_64::instructions::interrupts;
-use x86_64::instructions::port::Port;
-
-const VGA_BUFFER: *const u16 = 0xb8000 as *const u16;
-const BUFFER_HEIGHT: usize = 25;
-const BUFFER_WIDTH: usize = 80;
-
-const STATUS_OUTPUT_FULL: u8 = 1 << 0;
-const STATUS_INPUT_FULL: u8 = 1 << 1;
-const CMD_WRITE_KEYBOARD_OUTPUT: u8 = 0xd2;
 
 // скан-коды набора 1: отпускание клавиши = код нажатия | 0x80
 const A_PRESSED: u8 = 0x1e;
 const A_RELEASED: u8 = 0x9e;
 const B_PRESSED: u8 = 0x30;
-const LSHIFT_PRESSED: u8 = 0x2a;
-const LSHIFT_RELEASED: u8 = 0xaa;
 
 entry_point!(test_kernel_main);
 
-// ScancodeStream::new (внутри print_keypresses) можно вызвать только один раз,
-// поэтому задача одна на все тесты
-static PRINTER: Mutex<Option<Pin<Box<dyn Future<Output = ()> + Send>>>> = Mutex::new(None);
+// scancodes() можно вызвать только один раз, поэтому поток один на все тесты
+static SCANCODES: Mutex<Option<QueueStream<u8>>> = Mutex::new(None);
 static WOKEN: AtomicBool = AtomicBool::new(false);
 
 fn test_kernel_main(boot_info: &'static BootInfo) -> ! {
     rustos::init();
-    // print_keypresses создаёт очередь скан-кодов в куче
+    // очередь скан-кодов создаётся в куче
     common::init_heap(boot_info);
-
-    *PRINTER.lock() = Some(Box::pin(keyboard::print_keypresses()));
-    // первый опрос создаёт очередь; без неё обработчик выбрасывает скан-коды
-    assert!(poll_printer().is_pending());
+    *SCANCODES.lock() = Some(keyboard::scancodes());
 
     test_main();
     rustos::hlt_loop();
@@ -70,7 +52,7 @@ fn panic(info: &PanicInfo) -> ! {
     rustos::test_panic_handler(info)
 }
 
-/// Waker, который только запоминает, что задачу разбудили
+/// Waker, который только запоминает, что поток разбудили
 fn flag_waker() -> Waker {
     fn clone(_: *const ()) -> RawWaker {
         RawWaker::new(core::ptr::null(), &VTABLE)
@@ -84,119 +66,71 @@ fn flag_waker() -> Waker {
     unsafe { Waker::from_raw(clone(core::ptr::null())) }
 }
 
-/// Опрашивает print_keypresses: она печатает все скан-коды из очереди
-/// и возвращает Pending, когда очередь опустеет
-fn poll_printer() -> Poll<()> {
+fn poll_scancode() -> Poll<Option<u8>> {
     let waker = flag_waker();
     let mut context = Context::from_waker(&waker);
-    let mut printer = PRINTER.lock();
-    printer.as_mut().unwrap().as_mut().poll(&mut context)
+    let mut scancodes = SCANCODES.lock();
+    Pin::new(scancodes.as_mut().unwrap()).poll_next(&mut context)
 }
 
-fn status() -> u8 {
-    unsafe { Port::<u8>::new(0x64).read() }
-}
-
-fn press(scancode: u8) {
-    while status() & STATUS_INPUT_FULL != 0 {}
-    unsafe { Port::<u8>::new(0x64).write(CMD_WRITE_KEYBOARD_OUTPUT) };
-    while status() & STATUS_INPUT_FULL != 0 {}
-    unsafe { Port::<u8>::new(0x60).write(scancode) };
-
-    // буфер освободится, когда обработчик клавиатуры прочитает порт 0x60
-    while status() & STATUS_OUTPUT_FULL != 0 {
-        x86_64::instructions::hlt();
-    }
-}
-
-/// Последняя строка экрана без точек от обработчика таймера и пробелов
-fn last_row_without_timer_dots() -> ([u8; BUFFER_WIDTH], usize) {
-    let mut out = [0; BUFFER_WIDTH];
+/// Читает всё, что накопилось в очереди
+fn drain() -> ([u8; 16], usize) {
+    let mut out = [0; 16];
     let mut len = 0;
-    interrupts::without_interrupts(|| {
-        for col in 0..BUFFER_WIDTH {
-            let offset = (BUFFER_HEIGHT - 1) * BUFFER_WIDTH + col;
-            let ch = unsafe { VGA_BUFFER.add(offset).read_volatile() } as u8;
-            if ch != b'.' && ch != b' ' {
-                out[len] = ch;
-                len += 1;
-            }
-        }
-    });
+    while let Poll::Ready(Some(scancode)) = poll_scancode() {
+        out[len] = scancode;
+        len += 1;
+    }
     (out, len)
 }
 
-fn assert_typed(scancodes: &[u8], expected: &[u8]) {
-    // пустая строка, чтобы не зависеть от того, что уже напечатано
-    println!();
+fn assert_scancodes(scancodes: &[u8]) {
+    drain();
     for &scancode in scancodes {
-        press(scancode);
+        press_key(scancode);
     }
-    // задача бесконечная: она никогда не завершается
-    assert!(poll_printer().is_pending());
-    let (row, len) = last_row_without_timer_dots();
-    assert_eq!(&row[..len], expected);
+    let (out, len) = drain();
+    assert_eq!(&out[..len], scancodes);
 }
 
 #[test_case]
-fn test_key_press_prints_char() {
-    assert_typed(&[A_PRESSED, A_RELEASED], b"a");
+fn test_key_press_reaches_stream() {
+    assert_scancodes(&[A_PRESSED]);
 }
 
 #[test_case]
-fn test_key_release_prints_nothing() {
-    assert_typed(&[A_RELEASED], b"");
+fn test_release_reaches_stream() {
+    // драйвер не разбирает скан-коды, отпускание - такой же байт
+    assert_scancodes(&[A_PRESSED, A_RELEASED]);
 }
 
 #[test_case]
-fn test_several_keys_in_order() {
-    assert_typed(&[A_PRESSED, A_RELEASED, B_PRESSED, A_PRESSED], b"aba");
+fn test_scancodes_keep_order() {
+    assert_scancodes(&[A_PRESSED, A_RELEASED, B_PRESSED, A_PRESSED]);
 }
 
 #[test_case]
-fn test_shift_gives_uppercase() {
-    // pc-keyboard отдаёт нажатие Shift как RawKey(LShift),
-    // и обработчик печатает его название через {:?}
-    assert_typed(
-        &[
-            LSHIFT_PRESSED,
-            A_PRESSED,
-            A_RELEASED,
-            LSHIFT_RELEASED,
-            A_PRESSED,
-        ],
-        b"LShiftAa",
-    );
+fn test_empty_stream_is_pending() {
+    drain();
+    assert_eq!(poll_scancode(), Poll::Pending);
 }
 
 #[test_case]
-fn test_scancodes_wait_for_task() {
-    // обработчик прерывания только кладёт скан-код в очередь,
-    // пока задача не опрошена, на экране ничего нет
-    println!();
-    press(A_PRESSED);
-    let (_, len) = last_row_without_timer_dots();
-    assert_eq!(len, 0);
-
-    assert!(poll_printer().is_pending());
-    let (row, len) = last_row_without_timer_dots();
-    assert_eq!(&row[..len], b"a");
-}
-
-#[test_case]
-fn test_key_press_wakes_task() {
-    assert!(poll_printer().is_pending());
+fn test_key_press_wakes_stream() {
+    drain();
+    assert_eq!(poll_scancode(), Poll::Pending);
     WOKEN.store(false, Ordering::SeqCst);
-    press(A_PRESSED);
+    press_key(A_PRESSED);
     assert!(WOKEN.load(Ordering::SeqCst));
-    assert!(poll_printer().is_pending());
+    assert_eq!(poll_scancode(), Poll::Ready(Some(A_PRESSED)));
 }
 
 #[test_case]
 fn test_no_wake_without_key_press() {
-    assert!(poll_printer().is_pending());
+    drain();
+    assert_eq!(poll_scancode(), Poll::Pending);
     WOKEN.store(false, Ordering::SeqCst);
-    // ждём несколько прерываний таймера: они не должны будить задачу
+    // ждём несколько прерываний таймера: они не должны будить поток
     for _ in 0..3 {
         x86_64::instructions::hlt();
     }

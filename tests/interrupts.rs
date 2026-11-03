@@ -122,3 +122,11 @@ fn last_vga_row() -> ([u8; 80], usize) {
     let len = row.iter().rposition(|&b| b != b' ').map_or(0, |i| i + 1);
     (row, len)
 }
+
+#[test_case]
+fn test_init_writes_pic_masks() {
+    // BIOS оставляет COM1 замаскированным, init должен включить его линию
+    use rustos::arch::x86_64::interrupts::{PIC_1_MASK, PIC_2_MASK, PICS};
+    let masks = unsafe { PICS.lock().read_masks() };
+    assert_eq!(masks, [PIC_1_MASK, PIC_2_MASK]);
+}

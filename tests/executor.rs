@@ -10,7 +10,7 @@ use common::yield_now;
 use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use futures_util::stream::StreamExt;
-use rustos::drivers::keyboard::ScancodeStream;
+use rustos::drivers::keyboard;
 use rustos::task::{Task, executor::Executor};
 use rustos::{QemuExitCode, exit_qemu, serial_print, serial_println};
 use x86_64::instructions::port::Port;
@@ -21,7 +21,7 @@ use x86_64::instructions::port::Port;
 //
 // Задачи:
 // - workers: по несколько раз уступают очередь (waker сразу будит задачу);
-// - keyboard: ждёт скан-код из ScancodeStream. Её будит обработчик прерывания
+// - keyboard: ждёт скан-код из keyboard::scancodes(). Её будит обработчик прерывания
 //   клавиатуры, а до этого executor спит в hlt, потому что очередь пуста;
 // - presser: эмулирует нажатие клавиши (как в tests/keyboard.rs), но не ждёт
 //   обработчика, поэтому прерывание приходит, когда executor уже уснул
@@ -73,7 +73,7 @@ async fn presser() {
 }
 
 async fn keyboard_task() {
-    let mut scancodes = ScancodeStream::new();
+    let mut scancodes = keyboard::scancodes();
     let scancode = scancodes.next().await;
     assert_eq!(scancode, Some(A_PRESSED));
 
