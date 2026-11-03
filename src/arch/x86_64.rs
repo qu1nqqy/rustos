@@ -7,7 +7,11 @@ pub use x86_64::instructions::interrupts::without_interrupts;
 pub fn init() {
     gdt::init();
     interrupts::init_idt();
-    unsafe { interrupts::PICS.lock().initialize() };
+    unsafe {
+        let mut pics = interrupts::PICS.lock();
+        pics.initialize();
+        pics.write_masks(interrupts::PIC_1_MASK, interrupts::PIC_2_MASK);
+    }
     x86_64::instructions::interrupts::enable();
 }
 

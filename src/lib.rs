@@ -17,6 +17,7 @@ pub mod drivers;
 pub mod mm;
 pub mod task;
 pub mod time;
+pub mod tty;
 
 pub use arch::x86_64::hlt_loop;
 
@@ -25,6 +26,7 @@ use bootloader::{BootInfo, entry_point};
 use core::panic::PanicInfo;
 
 pub fn init() {
+    drivers::serial::init();
     arch::x86_64::init();
 }
 
@@ -82,9 +84,17 @@ pub fn test_panic_handler(info: &PanicInfo) -> ! {
 entry_point!(test_kernel_main);
 
 #[cfg(test)]
-fn test_kernel_main(_boot_info: &'static BootInfo) -> ! {
+fn test_kernel_main(boot_info: &'static BootInfo) -> ! {
     // init() здесь не вызывается: unit-тесты не меняют состояние CPU,
-    // загрузка GDT/IDT, прерывания и таблицы страниц проверяются в tests/ (см. testing.md)
+    // загрузка GDT/IDT и прерывания проверяются в tests/ (см. testing.md).
+    // Куча нужна коду, который работает с Box, Vec и String
+    let phys_mem_offset = x86_64::VirtAddr::new(boot_info.physical_memory_offset);
+    let mut mapper = unsafe { mm::paging::init(phys_mem_offset) };
+    let mut frame_allocator =
+        unsafe { mm::paging::BootInfoFrameAllocator::init(&boot_info.memory_map) };
+    mm::allocator::init_heap(&mut mapper, &mut frame_allocator)
+        .expect("heap initialization failed");
+
     test_main();
     hlt_loop();
 }

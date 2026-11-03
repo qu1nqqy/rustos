@@ -7,6 +7,7 @@ use core::{
 };
 
 pub mod executor;
+pub mod queue;
 pub mod simple_executor;
 
 /// Асинхронная задача: future, который выполняет executor
