@@ -6,6 +6,8 @@ use core::fmt::{self, Write};
 use core::panic::PanicInfo;
 use rustos::mm::{allocator, paging};
 use x86_64::VirtAddr;
+use x86_64::instructions::interrupts;
+use x86_64::instructions::port::Port;
 
 /// Проверяет, что сообщение паники начинается с `prefix`, не выделяя память:
 /// сообщение форматируется кусками, и каждый кусок сравнивается с ещё не
@@ -73,4 +75,66 @@ impl core::future::Future for YieldNow {
 #[allow(dead_code)]
 pub fn yield_now() -> YieldNow {
     YieldNow { yielded: false }
+}
+
+const PS2_STATUS_OUTPUT_FULL: u8 = 1 << 0;
+const PS2_STATUS_INPUT_FULL: u8 = 1 << 1;
+const PS2_CMD_WRITE_KEYBOARD_OUTPUT: u8 = 0xd2;
+
+/// Эмулирует нажатие клавиши: команда 0xD2 контроллера PS/2 кладёт байт в его
+/// выходной буфер так, будто его прислала клавиатура, и поднимает IRQ1.
+/// Возвращается, когда обработчик прерывания прочитал скан-код.
+/// Нужны rustos::init() и включённые прерывания
+#[allow(dead_code)]
+pub fn press_key(scancode: u8) {
+    let mut status = Port::<u8>::new(0x64);
+    let mut command = Port::<u8>::new(0x64);
+    let mut data = Port::<u8>::new(0x60);
+    unsafe {
+        while status.read() & PS2_STATUS_INPUT_FULL != 0 {}
+        command.write(PS2_CMD_WRITE_KEYBOARD_OUTPUT);
+        while status.read() & PS2_STATUS_INPUT_FULL != 0 {}
+        data.write(scancode);
+
+        // буфер освободится, когда обработчик клавиатуры прочитает порт 0x60
+        while status.read() & PS2_STATUS_OUTPUT_FULL != 0 {
+            x86_64::instructions::hlt();
+        }
+    }
+}
+
+const COM1: u16 = 0x3f8;
+const MCR_LOOPBACK: u8 = 1 << 4;
+const LSR_THR_EMPTY: u8 = 1 << 5;
+const LSR_TRANSMITTER_EMPTY: u8 = 1 << 6;
+/// Приёмный FIFO UART - 16 байт, больше за раз отправлять нельзя: пока
+/// прерывания выключены, обработчик их не заберёт и лишние потеряются
+pub const SERIAL_CHUNK: usize = 16;
+
+/// Эмулирует байты, пришедшие из терминала в COM1. В режиме loopback UART
+/// принимает собственные отправленные байты, и они вызывают то же прерывание
+/// IRQ4, что и байты из терминала.
+///
+/// Прерывания выключены на всё время loopback: иначе вывод тестов через serial
+/// тоже ушёл бы не в терминал, а в приёмник
+#[allow(dead_code)]
+pub fn send_from_terminal(bytes: &[u8]) {
+    assert!(
+        bytes.len() <= SERIAL_CHUNK,
+        "at most {} bytes at once",
+        SERIAL_CHUNK
+    );
+    let mut data = Port::<u8>::new(COM1);
+    let mut mcr = Port::<u8>::new(COM1 + 4);
+    let mut lsr = Port::<u8>::new(COM1 + 5);
+    interrupts::without_interrupts(|| unsafe {
+        let old_mcr = mcr.read();
+        mcr.write(old_mcr | MCR_LOOPBACK);
+        for &byte in bytes {
+            while lsr.read() & LSR_THR_EMPTY == 0 {}
+            data.write(byte);
+        }
+        while lsr.read() & LSR_TRANSMITTER_EMPTY == 0 {}
+        mcr.write(old_mcr);
+    });
 }

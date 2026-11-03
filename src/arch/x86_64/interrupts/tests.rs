@@ -34,6 +34,38 @@ fn test_interrupt_index_matches_irq_lines() {
     // таймер - IRQ0, клавиатура - IRQ1 первого PIC
     assert_eq!(InterruptIndex::Timer.as_u8(), PIC_1_OFFSET);
     assert_eq!(InterruptIndex::Keyboard.as_u8(), PIC_1_OFFSET + 1);
+    // COM1 - IRQ4
+    assert_eq!(InterruptIndex::Serial.as_u8(), PIC_1_OFFSET + 4);
+}
+
+#[test_case]
+fn test_serial_handler_registered() {
+    let expected = VirtAddr::from_ptr(serial_interrupt_handler as *const ());
+    assert_eq!(IDT[InterruptIndex::Serial.as_u8()].handler_addr(), expected);
+}
+
+#[test_case]
+fn test_pic_masks_enable_handled_lines() {
+    // бит 0 - линия включена
+    for line in [0, 1, 2, 4] {
+        assert_eq!(PIC_1_MASK & (1 << line), 0, "IRQ{} masked", line);
+    }
+}
+
+#[test_case]
+fn test_pic_masks_disable_unhandled_lines() {
+    for line in [3, 5, 6, 7] {
+        assert_ne!(PIC_1_MASK & (1 << line), 0, "IRQ{} unmasked", line);
+    }
+    assert_eq!(PIC_2_MASK, 0xff);
+}
+
+#[test_case]
+fn test_unhandled_irq_lines_have_no_handler() {
+    // IRQ 2 занят каскадом и прерываний не даёт, 3 - COM2, 5..7 - пусто
+    for line in [3, 5, 6, 7] {
+        assert_eq!(IDT[PIC_1_OFFSET + line].handler_addr(), VirtAddr::zero());
+    }
 }
 
 #[test_case]
