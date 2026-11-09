@@ -12,6 +12,7 @@ extern crate bootloader as _;
 extern crate alloc;
 
 pub mod arch;
+pub mod shell;
 pub mod console;
 pub mod drivers;
 pub mod mm;
