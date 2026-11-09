@@ -66,3 +66,8 @@ harness = false
 [[test]]
 name = "executor"
 harness = false
+
+[lints.clippy]
+# `new()` без аргументов у аллокаторов, executor и декодеров - обычный
+# конструктор, часто `const fn` для статиков; `Default` к ним ничего не добавляет
+new_without_default = "allow"

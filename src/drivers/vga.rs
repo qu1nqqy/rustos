@@ -71,7 +71,7 @@ enum Escape {
     /// Обычный текст
     Ground,
     /// Пришёл ESC, ждём `[`
-    Escape,
+    Esc,
     /// Внутри `ESC [ ...`: копим числовой параметр до финального символа
     Csi { param: u16 },
 }
@@ -120,7 +120,7 @@ impl Writer {
     fn write_char(&mut self, c: char) {
         match self.escape {
             Escape::Ground => match c {
-                '\x1b' => self.escape = Escape::Escape,
+                '\x1b' => self.escape = Escape::Esc,
                 '\n' => self.new_line(),
                 '\r' => self.column_position = 0,
                 // входит в печатный ASCII диапазон
@@ -128,7 +128,7 @@ impl Writer {
                 // остального в кодировке VGA нет, выводим ■
                 _ => self.write_byte(0xfe),
             },
-            Escape::Escape => {
+            Escape::Esc => {
                 self.escape = match c {
                     '[' => Escape::Csi { param: 0 },
                     // другие последовательности не поддерживаем
