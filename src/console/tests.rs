@@ -76,3 +76,10 @@ fn test_output_with_serial_enabled_still_goes_to_vga() {
     serial_println!();
     assert_last_row(b"console_serial_output");
 }
+
+#[test_case]
+fn test_console_writer_prints() {
+    use core::fmt::Write;
+    write!(Console, "\nconsole {}", "writer").unwrap();
+    assert_last_row(b"console writer");
+}
