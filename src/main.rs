@@ -6,16 +6,16 @@
 
 extern crate alloc;
 
-use rustos::shell::Shell;
 use bootloader::{BootInfo, entry_point};
 use core::panic::PanicInfo;
+use rustos::arch::x86_64::power;
 use rustos::mm::allocator;
 use rustos::mm::paging::{self, BootInfoFrameAllocator};
 use rustos::println;
+use rustos::shell::Shell;
 use rustos::task::{Task, executor::Executor};
 use rustos::tty::Tty;
 use x86_64::VirtAddr;
-use rustos::arch::x86_64::power;
 
 // entry_point! проверяет сигнатуру kernel_main и сам объявляет _start,
 // через который bootloader передаёт BootInfo

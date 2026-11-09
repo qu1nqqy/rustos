@@ -1,7 +1,7 @@
 mod builtins;
 mod parse;
 
-pub use builtins::{COMMANDS, Command};
+pub use builtins::{COMMANDS, Command, CommandFuture, Run};
 pub use parse::{ParseError, split};
 
 use crate::console::Console;
@@ -31,19 +31,19 @@ impl Shell {
         }
     }
 
-    pub async fn run (&mut self) {
+    pub async fn run(&mut self) {
         while !self.exit_requested {
             match self.tty.read_line(PROMPT).await {
                 ReadLine::Line(line) => {
-                    self.status = self.execute(&line, &mut Console);
-                },
+                    self.status = self.execute(&line, &mut Console).await;
+                }
                 ReadLine::Interrupted => self.status = STATUS_INTERRUPTED,
                 ReadLine::Eof => break,
             }
         }
     }
 
-    pub fn execute(&mut self, line: &str, out: &mut dyn Write) -> i32 {
+    pub async fn execute(&mut self, line: &str, out: &mut dyn Write) -> i32 {
         let words = match split(line) {
             Ok(words) => words,
             Err(e) => {
@@ -57,13 +57,16 @@ impl Shell {
         };
         let args: Vec<&str> = args.iter().map(String::as_str).collect();
 
-        match builtins::find(name) {
-            Some(command) => (command.run)(self, &args, out).unwrap_or(1),
-            None => {
-                let _ = writeln!(out, "rustos: {}: command not found", name);
-                return STATUS_NOT_FOUND;
-            }
-        }
+        let Some(command) = builtins::find(name) else {
+            let _ = writeln!(out, "rustos: {}: command not found", name);
+            return STATUS_NOT_FOUND;
+        };
+        let result = match command.run {
+            Run::Sync(run) => run(self, &args, out),
+            Run::Async(run) => run(self, &args, out).await,
+        };
+
+        result.unwrap_or(1)
     }
 
     pub fn status(&self) -> i32 {

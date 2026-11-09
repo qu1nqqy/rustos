@@ -17,7 +17,7 @@ impl fmt::Display for ParseError {
     }
 }
 
-pub fn split(line : &str) -> Result<Vec<String>, ParseError> {
+pub fn split(line: &str) -> Result<Vec<String>, ParseError> {
     let mut words = Vec::new();
     let mut word = String::new();
     let mut in_word = false;
@@ -30,17 +30,17 @@ pub fn split(line : &str) -> Result<Vec<String>, ParseError> {
                     words.push(core::mem::take(&mut word));
                     in_word = false;
                 }
-            },
+            }
             '\'' => {
                 in_word = true;
-                loop  {
+                loop {
                     match chars.next() {
                         Some('\'') => break,
                         Some(c) => word.push(c),
                         None => return Err(ParseError::UnclosedQuote('\'')),
                     }
                 }
-            },
+            }
             '"' => {
                 in_word = true;
                 loop {
@@ -51,26 +51,25 @@ pub fn split(line : &str) -> Result<Vec<String>, ParseError> {
                             Some(c) => {
                                 word.push('\\');
                                 word.push(c);
-
-                            },
+                            }
                             None => return Err(ParseError::UnclosedQuote('"')),
                         },
                         Some(c) => word.push(c),
                         None => return Err(ParseError::UnclosedQuote('"')),
                     }
                 }
-            },
+            }
             '\\' => {
                 in_word = true;
                 match chars.next() {
                     Some(c) => word.push(c),
                     None => return Err(ParseError::TrailingBackslash),
                 }
-            },
+            }
             c => {
                 in_word = true;
                 word.push(c);
-            },
+            }
         }
     }
     if in_word {

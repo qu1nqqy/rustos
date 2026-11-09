@@ -12,10 +12,10 @@ extern crate bootloader as _;
 extern crate alloc;
 
 pub mod arch;
-pub mod shell;
 pub mod console;
 pub mod drivers;
 pub mod mm;
+pub mod shell;
 pub mod task;
 pub mod time;
 pub mod tty;
@@ -28,6 +28,7 @@ use core::panic::PanicInfo;
 
 pub fn init() {
     drivers::serial::init();
+    time::init();
     arch::x86_64::init();
 }
 

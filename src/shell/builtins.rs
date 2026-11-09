@@ -1,53 +1,71 @@
 use super::{CommandResult, STATUS_USAGE, Shell};
 use crate::arch::x86_64::power;
 use crate::time;
+use alloc::boxed::Box;
 use core::fmt::Write;
+use core::future::Future;
+use core::pin::Pin;
+use core::time::Duration;
+
+pub type CommandFuture<'a> = Pin<Box<dyn Future<Output = CommandResult> + 'a>>;
+
+#[derive(Clone, Copy)]
+pub enum Run {
+    Sync(fn(&mut Shell, &[&str], &mut dyn Write) -> CommandResult),
+    Async(for<'a> fn(&'a mut Shell, &'a [&'a str], &'a mut dyn Write) -> CommandFuture<'a>),
+}
+
 pub struct Command {
     pub name: &'static str,
     pub help: &'static str,
-    pub run: fn(&mut Shell, &[&str], &mut dyn Write) -> CommandResult,
+    pub run: Run,
 }
 
 pub const COMMANDS: &[Command] = &[
     Command {
         name: "help",
         help: "list commands",
-        run: help,
+        run: Run::Sync(help),
     },
     Command {
         name: "echo",
         help: "print arguments (-n: no newline)",
-        run: echo,
+        run: Run::Sync(echo),
     },
     Command {
         name: "clear",
         help: "clear the screen",
-        run: clear,
+        run: Run::Sync(clear),
     },
     Command {
         name: "history",
         help: "show entered lines",
-        run: history,
+        run: Run::Sync(history),
     },
     Command {
         name: "uptime",
         help: "time since boot",
-        run: uptime,
+        run: Run::Sync(uptime),
+    },
+    Command {
+        name: "sleep",
+        help: "wait for N seconds (N may be fractional)",
+        run: Run::Async(sleep),
     },
     Command {
         name: "exit",
         help: "exit the shell [code]",
-        run: exit,
+        run: Run::Sync(exit),
     },
     Command {
         name: "reboot",
         help: "restart the computer",
-        run: reboot,
+        run: Run::Sync(reboot),
     },
     Command {
         name: "poweroff",
         help: "turn the computer off",
-        run: poweroff,
+        run: Run::Sync(poweroff),
     },
     // TODO: uname - имя ОС, версия (env!("CARGO_PKG_VERSION")) и архитектура
 ];
@@ -93,11 +111,51 @@ fn history(shell: &mut Shell, _args: &[&str], out: &mut dyn Write) -> CommandRes
 }
 
 fn uptime(_shell: &mut Shell, _args: &[&str], out: &mut dyn Write) -> CommandResult {
-    let ticks = time::ticks();
-    // таймер не настроен и тикает с частотой ≈ 18.2 Гц
-    let seconds = ticks * 10 / 182;
-    writeln!(out, "up {} s ({} ticks)", seconds, ticks)?;
+    let seconds = time::uptime().as_secs();
+    let (hours, minutes, seconds) = (seconds / 3600, (seconds / 60) % 60, seconds % 60);
+    writeln!(out, "up {:02}:{:02}:{:02}", hours, minutes, seconds)?;
     Ok(0)
+}
+
+fn sleep<'a>(
+    _shell: &'a mut Shell,
+    args: &'a [&'a str],
+    out: &'a mut dyn Write,
+) -> CommandFuture<'a> {
+    Box::pin(async move {
+        let [arg] = args else {
+            writeln!(out, "usage: sleep SECONDS")?;
+            return Ok(STATUS_USAGE);
+        };
+        let Some(duration) = parse_seconds(arg) else {
+            writeln!(out, "sleep: invalid time interval '{}'", arg)?;
+            return Ok(STATUS_USAGE);
+        };
+        time::sleep(duration).await;
+        Ok(0)
+    })
+}
+
+pub fn parse_seconds(s: &str) -> Option<Duration> {
+    let (whole, fraction) = s.split_once('.').unwrap_or((s, ""));
+    if whole.is_empty() && fraction.is_empty() {
+        return None;
+    }
+    let all_digits = |part: &str| part.bytes().all(|b| b.is_ascii_digit());
+    if !all_digits(whole) || !all_digits(fraction) {
+        return None;
+    }
+    let seconds: u64 = if whole.is_empty() {
+        0
+    } else {
+        whole.parse().ok()?
+    };
+
+    let mut millis = 0;
+    for (i, digit) in fraction.bytes().take(3).enumerate() {
+        millis += (digit - b'0') as u64 * 10u64.pow(2 - i as u32);
+    }
+    Some(Duration::from_secs(seconds) + Duration::from_millis(millis))
 }
 
 fn exit(shell: &mut Shell, args: &[&str], out: &mut dyn Write) -> CommandResult {
