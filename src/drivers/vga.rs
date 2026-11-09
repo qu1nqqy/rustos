@@ -3,8 +3,8 @@ use lazy_static::lazy_static;
 use spin::Mutex;
 use volatile::VolatileRef;
 
-const BUFFER_HEIGHT: usize = 25;
-const BUFFER_WIDTH: usize = 80;
+pub const BUFFER_HEIGHT: usize = 25;
+pub const BUFFER_WIDTH: usize = 80;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,10 +65,24 @@ impl Buffer {
     }
 }
 
+/// Где Writer находится внутри escape-последовательности
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Escape {
+    /// Обычный текст
+    Ground,
+    /// Пришёл ESC, ждём `[`
+    Escape,
+    /// Внутри `ESC [ ...`: копим числовой параметр до финального символа
+    Csi { param: u16 },
+}
+
 pub struct Writer {
     column_position: usize,
     color_code: ColorCode,
     buffer: &'static mut Buffer,
+    // последовательность может прийти по частям, например из разных
+    // вызовов write_str при форматировании, поэтому состояние хранится в Writer
+    escape: Escape,
 }
 
 impl Writer {
@@ -97,13 +111,98 @@ impl Writer {
     }
 
     pub fn write_string(&mut self, s: &str) {
-        for byte in s.bytes() {
-            match byte {
-                // входит в ASCII диапазон или является символом новой строки
-                0x20..=0x7e | b'\n' => self.write_byte(byte),
-                // не входит в ASCII диапазон, выводим ■
+        for c in s.chars() {
+            self.write_char(c);
+        }
+        self.update_cursor();
+    }
+
+    fn write_char(&mut self, c: char) {
+        match self.escape {
+            Escape::Ground => match c {
+                '\x1b' => self.escape = Escape::Escape,
+                '\n' => self.new_line(),
+                '\r' => self.column_position = 0,
+                // входит в печатный ASCII диапазон
+                ' '..='~' => self.write_byte(c as u8),
+                // остального в кодировке VGA нет, выводим ■
                 _ => self.write_byte(0xfe),
+            },
+            Escape::Escape => {
+                self.escape = match c {
+                    '[' => Escape::Csi { param: 0 },
+                    // другие последовательности не поддерживаем
+                    _ => Escape::Ground,
+                }
             }
+            Escape::Csi { param } => match c {
+                '0'..='9' => {
+                    let digit = c as u16 - '0' as u16;
+                    let param = param.saturating_mul(10).saturating_add(digit);
+                    self.escape = Escape::Csi { param };
+                }
+                // несколько параметров, например цвет ESC [ 1 ; 31 m:
+                // запоминаем только последний
+                ';' => self.escape = Escape::Csi { param: 0 },
+                // финальный символ последовательности
+                '@'..='~' => {
+                    self.escape = Escape::Ground;
+                    self.control_sequence(c, param);
+                }
+                // неожиданный символ: последовательность испорчена
+                _ => self.escape = Escape::Ground,
+            },
+        }
+    }
+
+    /// Выполняет `ESC [ param command`. Курсор всегда в последней строке,
+    /// поэтому команды двигают его только по горизонтали
+    fn control_sequence(&mut self, command: char, param: u16) {
+        // у команд перемещения параметр 0 и пропущенный параметр означают 1
+        let count = (param as usize).max(1);
+        match command {
+            // курсор влево
+            'D' => self.column_position = self.column_position.saturating_sub(count),
+            // курсор вправо
+            'C' => {
+                self.column_position = (self.column_position + count).min(BUFFER_WIDTH - 1);
+            }
+            // стереть от курсора до конца строки
+            'K' if param == 0 => {
+                for col in self.column_position..BUFFER_WIDTH {
+                    self.buffer.write(BUFFER_HEIGHT - 1, col, self.blank());
+                }
+            }
+            // очистить экран
+            'J' if param == 2 => {
+                for row in 0..BUFFER_HEIGHT {
+                    self.clear_row(row);
+                }
+            }
+            // курсор в начало (строка всегда последняя)
+            'H' => self.column_position = 0,
+            // остальное, например цвета (m), пропускаем
+            _ => {}
+        }
+    }
+
+    /// Переносит мигающий курсор видеокарты туда, куда будет записан
+    /// следующий символ
+    fn update_cursor(&self) {
+        use x86_64::instructions::port::Port;
+
+        let col = self.column_position.min(BUFFER_WIDTH - 1);
+        let position = ((BUFFER_HEIGHT - 1) * BUFFER_WIDTH + col) as u16;
+        // у контроллера CRT два порта: в 0x3D4 пишется номер регистра,
+        // в 0x3D5 - его значение. Регистры 0x0F и 0x0E - младший и старший
+        // байт позиции курсора
+        let mut index = Port::<u8>::new(0x3d4);
+        let mut data = Port::<u8>::new(0x3d5);
+        unsafe {
+            index.write(0x0f);
+            data.write(position as u8);
+            index.write(0x0e);
+            data.write((position >> 8) as u8);
         }
     }
 
@@ -119,12 +218,15 @@ impl Writer {
     }
 
     fn clear_row(&mut self, row: usize) {
-        let blank = ScreenChar {
+        for col in 0..BUFFER_WIDTH {
+            self.buffer.write(row, col, self.blank());
+        }
+    }
+
+    fn blank(&self) -> ScreenChar {
+        ScreenChar {
             ascii_character: b' ',
             color_code: self.color_code,
-        };
-        for col in 0..BUFFER_WIDTH {
-            self.buffer.write(row, col, blank);
         }
     }
 }
@@ -141,6 +243,7 @@ lazy_static! {
         column_position: 0,
         color_code: ColorCode::new(Color::LightGreen, Color::Black),
         buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
+        escape: Escape::Ground,
     });
 }
 

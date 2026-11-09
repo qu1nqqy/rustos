@@ -8,12 +8,11 @@ extern crate alloc;
 
 use bootloader::{BootInfo, entry_point};
 use core::panic::PanicInfo;
-use futures_util::stream::StreamExt;
 use rustos::mm::allocator;
 use rustos::mm::paging::{self, BootInfoFrameAllocator};
+use rustos::println;
 use rustos::task::{Task, executor::Executor};
-use rustos::tty::{self, Key};
-use rustos::{print, println};
+use rustos::tty::{ReadLine, Tty};
 use x86_64::VirtAddr;
 
 // entry_point! проверяет сигнатуру kernel_main и сам объявляет _start,
@@ -37,7 +36,7 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
 
     let mut executor = Executor::new();
     executor.spawn(Task::new(example_task()));
-    executor.spawn(Task::new(echo_keys()));
+    executor.spawn(Task::new(echo_lines()));
     executor.run();
 }
 
@@ -50,16 +49,17 @@ async fn example_task() {
     println!("async number: {}", number);
 }
 
-/// Печатает нажатые клавиши: символы как есть, остальные клавиши по имени
-async fn echo_keys() {
-    let mut keys = tty::keys();
-    while let Some(key) = keys.next().await {
-        match key {
-            Key::Char(c) => print!("{}", c),
-            Key::Enter => println!(),
-            other => print!("<{:?}>", other),
+/// Читает строки и повторяет их, пока не нажат Ctrl+D
+async fn echo_lines() {
+    let mut tty = Tty::new();
+    loop {
+        match tty.read_line("> ").await {
+            ReadLine::Line(line) => println!("you typed: {}", line),
+            ReadLine::Interrupted => {}
+            ReadLine::Eof => break,
         }
     }
+    println!("bye");
 }
 
 /// This function is called on panic.
