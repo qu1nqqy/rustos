@@ -53,7 +53,7 @@ fn panic(info: &PanicInfo) -> ! {
     serial_println!("[failed]\n");
     serial_println!("Error: {}\n", info);
     exit_qemu(QemuExitCode::Failed);
-    loop {}
+    rustos::hlt_loop()
 }
 
 async fn worker(yields: usize) {

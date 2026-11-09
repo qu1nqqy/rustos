@@ -118,6 +118,8 @@ fn test_tasks_interleave() {
 #[test_case]
 fn test_task_owns_moved_data() {
     // async move забирает вектор внутрь задачи, он живёт столько же, сколько задача
+    // нужен именно Vec в куче, а не массив на стеке, как предлагает clippy
+    #[allow(clippy::useless_vec)]
     let data = vec![1, 2, 3];
     let steps = run_tasks(vec![Task::new(async move {
         yield_now().await;

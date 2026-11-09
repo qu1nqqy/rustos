@@ -121,7 +121,7 @@ fn test_history_empty() {
 fn advance_to_whole_second(seconds: u64) -> u64 {
     // в unit-тестах прерывания выключены, тики меняет только тест
     let target = seconds * time::TICKS_PER_SECOND;
-    while time::ticks() < target || time::ticks() % time::TICKS_PER_SECOND != 0 {
+    while time::ticks() < target || !time::ticks().is_multiple_of(time::TICKS_PER_SECOND) {
         time::tick();
     }
     time::ticks() / time::TICKS_PER_SECOND

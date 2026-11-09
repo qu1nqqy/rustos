@@ -136,7 +136,7 @@ fn test_frame_allocator_gives_usable_aligned_distinct_frames() {
 fn test_create_example_mapping() {
     // адрес из статьи: для него ещё нет таблиц 3-го..1-го уровня, поэтому
     // map_to придётся взять фреймы у аллокатора
-    let page = Page::containing_address(VirtAddr::new(0xdead_beaf_000));
+    let page = Page::containing_address(VirtAddr::new(0xdea_dbea_f000));
     {
         let mut paging = PAGING.lock();
         let (mapper, frame_allocator) = paging.as_mut().unwrap();
