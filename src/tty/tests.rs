@@ -118,6 +118,9 @@ fn test_read_line_eof_when_keys_end() {
     print!("\n");
     let mut tty = tty(chars("unfinished"));
     assert_eq!(run(tty.read_line("> ")), ReadLine::Eof);
+    // как и после Ctrl+D, курсор на новой строке
+    assert_eq!(row_above_cursor(), b"> unfinished");
+    assert_eq!(screen_row(vga::BUFFER_HEIGHT - 1), b"");
 }
 
 #[test_case]

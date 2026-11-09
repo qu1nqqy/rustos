@@ -105,6 +105,7 @@ pub fn press_key(scancode: u8) {
 
 const COM1: u16 = 0x3f8;
 const MCR_LOOPBACK: u8 = 1 << 4;
+const LSR_DATA_READY: u8 = 1 << 0;
 const LSR_THR_EMPTY: u8 = 1 << 5;
 const LSR_TRANSMITTER_EMPTY: u8 = 1 << 6;
 /// Приёмный FIFO UART - 16 байт, больше за раз отправлять нельзя: пока
@@ -116,7 +117,10 @@ pub const SERIAL_CHUNK: usize = 16;
 /// IRQ4, что и байты из терминала.
 ///
 /// Прерывания выключены на всё время loopback: иначе вывод тестов через serial
-/// тоже ушёл бы не в терминал, а в приёмник
+/// тоже ушёл бы не в терминал, а в приёмник.
+///
+/// Возвращается, когда обработчик прерывания забрал все байты из FIFO, поэтому
+/// вызовы подряд не переполняют FIFO
 #[allow(dead_code)]
 pub fn send_from_terminal(bytes: &[u8]) {
     assert!(
@@ -137,4 +141,9 @@ pub fn send_from_terminal(bytes: &[u8]) {
         while lsr.read() & LSR_TRANSMITTER_EMPTY == 0 {}
         mcr.write(old_mcr);
     });
+    // UART поднимает прерывание, когда FIFO наполнится или после паузы
+    // в несколько символов, а обработчик читает FIFO до конца
+    while unsafe { lsr.read() } & LSR_DATA_READY != 0 {
+        x86_64::instructions::hlt();
+    }
 }
