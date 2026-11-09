@@ -140,3 +140,12 @@ fn test_ctrl_c_then_command() {
     assert_eq!(session.status, 1);
     assert_rows_above_cursor(&[b"rustos$ exit 1", b"rustos$ echo lost^C"]);
 }
+
+#[test_case]
+fn test_sleep_waits() {
+    let start = rustos::time::ticks();
+    let session = run_shell(&[b"sleep 0.2\r", b"exit\r"]);
+    assert_eq!(session.status, 0);
+    // 200 мс - 20 тиков
+    assert!(rustos::time::ticks() >= start + 20);
+}

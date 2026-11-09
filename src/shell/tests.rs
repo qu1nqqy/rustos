@@ -46,7 +46,7 @@ fn screen_row(row: usize) -> String {
 
 fn execute(shell: &mut Shell, line: &str) -> (i32, String) {
     let mut out = String::new();
-    let status = shell.execute(line, &mut out);
+    let status = run(shell.execute(line, &mut out));
     (status, out)
 }
 
@@ -100,7 +100,7 @@ fn test_failed_output_is_command_error() {
             Err(fmt::Error)
         }
     }
-    assert_eq!(shell().execute("echo hi", &mut Broken), 1);
+    assert_eq!(run(shell().execute("echo hi", &mut Broken)), 1);
 }
 
 // run
