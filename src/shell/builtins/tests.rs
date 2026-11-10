@@ -56,7 +56,7 @@ fn test_find() {
 #[test_case]
 fn test_expected_commands_exist() {
     for name in [
-        "help", "echo", "clear", "history", "uptime", "sleep", "exit", "reboot", "poweroff",
+        "help", "echo", "clear", "history", "uptime", "date", "sleep", "exit", "reboot", "poweroff",
     ] {
         assert!(find(name).is_some(), "{} missing", name);
     }
@@ -277,4 +277,48 @@ fn test_exit_with_too_many_args() {
 #[test_case]
 fn test_unknown_command_status() {
     assert_eq!(run(&mut shell(), "frobnicate").0, STATUS_NOT_FOUND);
+}
+
+// date: время задаётся через time::set_time, и без tick() оно не меняется
+
+const OCT_27_10_00_UTC: i64 = 1_793_095_200;
+
+#[test_case]
+fn test_date_local() {
+    time::set_time(OCT_27_10_00_UTC);
+    assert_eq!(
+        run(&mut shell(), "date"),
+        (0, "Tue Oct 27 13:00:00 MSK 2026\n".into())
+    );
+}
+
+#[test_case]
+fn test_date_utc() {
+    time::set_time(OCT_27_10_00_UTC);
+    assert_eq!(
+        run(&mut shell(), "date -u"),
+        (0, "Tue Oct 27 10:00:00 UTC 2026\n".into())
+    );
+}
+
+#[test_case]
+fn test_date_unix() {
+    time::set_time(OCT_27_10_00_UTC);
+    assert_eq!(run(&mut shell(), "date +%s"), (0, "1793095200\n".into()));
+}
+
+#[test_case]
+fn test_date_bad_argument() {
+    let (status, out) = run(&mut shell(), "date --now");
+    assert_eq!(status, STATUS_USAGE);
+    assert_eq!(out, "usage: date [-u | +%s]\n");
+}
+
+#[test_case]
+fn test_format_date_pads_day() {
+    let date = time::DateTime::from_unix(1_788_310_800); // 2026-09-02 01:00:00
+    assert_eq!(
+        format_date(&date, time::UTC),
+        "Wed Sep  2 01:00:00 UTC 2026"
+    );
 }
