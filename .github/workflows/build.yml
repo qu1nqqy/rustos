@@ -9,18 +9,33 @@ on:
 
 permissions:
   contents: read
+  # tg-notify читает статус шагов через GitHub API
+  actions: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    outputs:
+      tg_message_id: ${{ steps.tg.outputs.message_id }}
     steps:
-      - uses: actions/checkout@v4
+      # первым шагом: дальше статус шагов action берёт из API сам.
+      # Имена шагов попадают в сообщение, поэтому у всех шагов есть name
+      - id: tg
+        uses: qu1nqqy/tg-notify@v1
+        with:
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+          topic_id: ${{ vars.TELEGRAM_TOPIC_ID }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
 
       # версия и компоненты берутся из rust-toolchain.toml
       - name: Install toolchain
         run: rustup toolchain install
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Cache
+        uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
 
@@ -46,15 +61,27 @@ jobs:
     # релизы только из master, пуши в dev и PR проходят лишь тесты
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    # свой блок permissions заменяет общий целиком, поэтому actions: read повторяется
     permissions:
       contents: write
+      actions: read
     steps:
-      - uses: actions/checkout@v4
+      # дописывает секцию release в сообщение задачи test
+      - uses: qu1nqqy/tg-notify@v1
+        with:
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+          topic_id: ${{ vars.TELEGRAM_TOPIC_ID }}
+          message_id: ${{ needs.test.outputs.tg_message_id }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Install toolchain
         run: rustup toolchain install
 
-      - uses: Swatinem/rust-cache@v2
+      - name: Cache
+        uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
 
@@ -73,12 +100,14 @@ jobs:
           cp target/x86-rustos/debug/bootimage-rustos.bin   dist/rustos-debug.bin
           cp target/x86-rustos/release/bootimage-rustos.bin dist/rustos-release.bin
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
           name: rustos-${{ github.sha }}
           path: dist/*.bin
 
       - name: Publish release
+        id: publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -89,3 +118,15 @@ jobs:
             --notes "Сборка коммита ${GITHUB_SHA}: $(git log -1 --pretty=%s)
 
           Запуск: \`qemu-system-x86_64 -drive format=raw,file=rustos-release.bin\`"
+          echo "tag=build-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      # отдельное сообщение о релизе с образами, закрепляется в теме проекта
+      - name: Notify release
+        uses: qu1nqqy/tg-notify@v1
+        with:
+          mode: release
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
+          topic_id: ${{ vars.TELEGRAM_TOPIC_ID }}
+          tag: ${{ steps.publish.outputs.tag }}
+          files: dist/*.bin
