@@ -3,18 +3,33 @@ use crate::drivers::{serial, vga};
 use core::fmt::{self, Write};
 use core::sync::atomic::{AtomicBool, Ordering};
 
+// В тестах serial занят под отчёт тест-раннера, поэтому по умолчанию консоль
+// пишет только на экран, а дублирование в serial включает kernel_main
 static SERIAL_ENABLED: AtomicBool = AtomicBool::new(false);
 
+/// Включает дублирование вывода консоли в последовательный порт
 pub fn enable_serial() {
     SERIAL_ENABLED.store(true, Ordering::Relaxed);
 }
 
+/// Выключает дублирование вывода консоли в последовательный порт
 pub fn disable_serial() {
     SERIAL_ENABLED.store(false, Ordering::Relaxed);
 }
 
 pub fn is_serial_enabled() -> bool {
     SERIAL_ENABLED.load(Ordering::Relaxed)
+}
+
+/// Консоль как приёмник `write!`: то же, что `print!`, но её можно передать
+/// туда, где ждут `impl fmt::Write`
+pub struct Console;
+
+impl fmt::Write for Console {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        _print(format_args!("{}", s));
+        Ok(())
+    }
 }
 
 #[doc(hidden)]
@@ -29,11 +44,13 @@ pub fn _print(args: fmt::Arguments) {
     });
 }
 
+/// Печатает в консоль: на экран и, если включено, в последовательный порт
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => ($crate::console::_print(format_args!($($arg)*)));
 }
 
+/// Печатает в консоль, добавляя перевод строки
 #[macro_export]
 macro_rules! println {
     () => ($crate::print!("\n"));

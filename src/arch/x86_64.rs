@@ -1,5 +1,6 @@
 pub mod gdt;
 pub mod interrupts;
+pub mod power;
 
 pub use x86_64::instructions::interrupts::without_interrupts;
 

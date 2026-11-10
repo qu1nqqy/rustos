@@ -15,7 +15,7 @@ pub extern "C" fn _start() -> ! {
 
     serial_println!("[test did not panic]");
     exit_qemu(QemuExitCode::Failed);
-    loop {}
+    rustos::hlt_loop()
 }
 
 #[allow(unconditional_recursion)]
@@ -39,5 +39,5 @@ fn panic(info: &PanicInfo) -> ! {
         serial_println!("Error: {}\n", info);
         exit_qemu(QemuExitCode::Failed);
     }
-    loop {}
+    rustos::hlt_loop()
 }

@@ -8,12 +8,13 @@ extern crate alloc;
 
 use bootloader::{BootInfo, entry_point};
 use core::panic::PanicInfo;
-use futures_util::stream::StreamExt;
+use rustos::arch::x86_64::power;
 use rustos::mm::allocator;
 use rustos::mm::paging::{self, BootInfoFrameAllocator};
+use rustos::println;
+use rustos::shell::Shell;
 use rustos::task::{Task, executor::Executor};
-use rustos::tty::{self, Key};
-use rustos::{print, println};
+use rustos::tty::Tty;
 use x86_64::VirtAddr;
 
 // entry_point! проверяет сигнатуру kernel_main и сам объявляет _start,
@@ -23,7 +24,6 @@ entry_point!(kernel_main);
 fn kernel_main(boot_info: &'static BootInfo) -> ! {
     // дублируем вывод в serial: с -serial stdio он попадает в терминал хоста
     rustos::console::enable_serial();
-    println!("Hello World{}", "!");
     rustos::init();
 
     let phys_mem_offset = VirtAddr::new(boot_info.physical_memory_offset);
@@ -35,31 +35,19 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     #[cfg(test)]
     test_main();
 
+    println!("rustos {}", env!("CARGO_PKG_VERSION"));
+    println!("type 'help' to list commands");
+
     let mut executor = Executor::new();
-    executor.spawn(Task::new(example_task()));
-    executor.spawn(Task::new(echo_keys()));
+    executor.spawn(Task::new(shell()));
     executor.run();
 }
 
-async fn async_number() -> u32 {
-    42
-}
-
-async fn example_task() {
-    let number = async_number().await;
-    println!("async number: {}", number);
-}
-
-/// Печатает нажатые клавиши: символы как есть, остальные клавиши по имени
-async fn echo_keys() {
-    let mut keys = tty::keys();
-    while let Some(key) = keys.next().await {
-        match key {
-            Key::Char(c) => print!("{}", c),
-            Key::Enter => println!(),
-            other => print!("<{:?}>", other),
-        }
-    }
+async fn shell() {
+    let mut shell = Shell::new(Tty::new());
+    shell.run().await;
+    println!("exit");
+    power::poweroff();
 }
 
 /// This function is called on panic.

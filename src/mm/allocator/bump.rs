@@ -23,7 +23,9 @@ impl BumpAllocator {
         }
     }
 
-    /// unsafe: вызывающий гарантирует, что память [heap_start, heap_start + heap_size)
+    /// # Safety
+    ///
+    /// Вызывающий гарантирует, что память [heap_start, heap_start + heap_size)
     /// не используется. Вызывать один раз
     pub unsafe fn init(&mut self, heap_start: usize, heap_size: usize) {
         self.heap_start = heap_start;

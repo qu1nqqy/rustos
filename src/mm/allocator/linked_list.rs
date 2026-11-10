@@ -38,7 +38,9 @@ impl LinkedListAllocator {
         }
     }
 
-    /// unsafe: вызывающий гарантирует, что память [heap_start, heap_start + heap_size)
+    /// # Safety
+    ///
+    /// Вызывающий гарантирует, что память [heap_start, heap_start + heap_size)
     /// не используется. Вызывать один раз
     pub unsafe fn init(&mut self, heap_start: usize, heap_size: usize) {
         unsafe {
@@ -67,7 +69,7 @@ impl LinkedListAllocator {
         // ссылка на текущий узел, начиная с фиктивного head
         let mut current = &mut self.head;
         while let Some(ref mut region) = current.next {
-            if let Ok(alloc_start) = Self::alloc_from_region(&region, size, align) {
+            if let Ok(alloc_start) = Self::alloc_from_region(region, size, align) {
                 // регион подходит: удаляем его из списка
                 let next = region.next.take();
                 let ret = Some((current.next.take().unwrap(), alloc_start));

@@ -15,7 +15,7 @@ pub extern "C" fn _start() -> ! {
     rustos::init();
     test_main();
 
-    loop {}
+    rustos::hlt_loop()
 }
 
 #[panic_handler]

@@ -13,7 +13,9 @@ use x86_64::{
 
 /// Создаёт OffsetPageTable для активной таблицы страниц 4-го уровня.
 ///
-/// unsafe: вызывающий гарантирует, что вся физическая память отображена
+/// # Safety
+///
+/// Вызывающий гарантирует, что вся физическая память отображена
 /// по `physical_memory_offset`. Вызывать один раз, иначе появятся две
 /// `&mut` ссылки на одну таблицу
 pub unsafe fn init(physical_memory_offset: VirtAddr) -> OffsetPageTable<'static> {
@@ -43,7 +45,9 @@ unsafe fn active_level_4_table(physical_memory_offset: VirtAddr) -> &'static mut
 /// у `OffsetPageTable`. На huge pages (например, в области
 /// `physical_memory_offset`) эта версия паникует, а `OffsetPageTable` - нет.
 ///
-/// unsafe: те же требования, что у `init`
+/// # Safety
+///
+/// Те же требования, что у `init`
 pub unsafe fn translate_addr(addr: VirtAddr, physical_memory_offset: VirtAddr) -> Option<PhysAddr> {
     translate_addr_inner(addr, physical_memory_offset)
 }
@@ -107,7 +111,9 @@ pub struct BootInfoFrameAllocator {
 }
 
 impl BootInfoFrameAllocator {
-    /// unsafe: вызывающий гарантирует, что фреймы, помеченные в карте как
+    /// # Safety
+    ///
+    /// Вызывающий гарантирует, что фреймы, помеченные в карте как
     /// `Usable`, действительно ничем не заняты
     pub unsafe fn init(memory_map: &'static MemoryMap) -> Self {
         BootInfoFrameAllocator {
