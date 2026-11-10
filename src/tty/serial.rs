@@ -53,6 +53,7 @@ impl SerialDecoder {
                     b'[' => State::Csi { param: 0 },
                     b'O' => State::Ss3,
                     // Alt + клавиша или одиночный Esc: не поддерживаем
+                    // TODO: Alt + буква как Key::Alt(char); одиночный Esc отличать по таймауту
                     _ => State::Ground,
                 };
                 None
@@ -65,6 +66,7 @@ impl SerialDecoder {
                     None
                 }
                 // ESC [ 1 ; 5 C - стрелка с модификатором: модификатор отбрасываем
+                // TODO: сохранять модификатор, чтобы Ctrl+←/→ переходили по словам
                 b';' => {
                     self.state = State::Csi { param: 0 };
                     None
@@ -73,6 +75,7 @@ impl SerialDecoder {
                 0x40..=0x7e => {
                     self.state = State::Ground;
                     match byte {
+                        // TODO: F5-F12 - ESC [ 15 ~ ... ESC [ 24 ~
                         b'~' => match param {
                             1 | 7 => Some(Key::Home),
                             3 => Some(Key::Delete),
@@ -88,6 +91,7 @@ impl SerialDecoder {
                     None
                 }
             },
+            // TODO: F1-F4 - ESC O P ... ESC O S
             State::Ss3 => {
                 self.state = State::Ground;
                 cursor_key(byte)

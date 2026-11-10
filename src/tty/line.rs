@@ -88,6 +88,7 @@ impl LineEditor {
                 self.buffer.drain(..self.cursor);
                 self.cursor = 0;
             }
+            // TODO: Ctrl+W - стереть слово перед курсором
             Key::Enter => return self.submit(),
             Key::Ctrl('c') => {
                 self.cursor = self.buffer.len();

@@ -17,6 +17,8 @@ pub fn disable_serial() {
     SERIAL_ENABLED.store(false, Ordering::Relaxed);
 }
 
+// TODO: disable_vga() по аналогии с serial: на сервере без экрана вывод нужен только в COM1
+
 pub fn is_serial_enabled() -> bool {
     SERIAL_ENABLED.load(Ordering::Relaxed)
 }

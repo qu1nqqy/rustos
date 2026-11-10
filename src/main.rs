@@ -38,6 +38,8 @@ fn kernel_main(boot_info: &'static BootInfo) -> ! {
     println!("rustos {}", env!("CARGO_PKG_VERSION"));
     println!("type 'help' to list commands");
 
+    // TODO: вывести, сколько тиков прошло от начала kernel_main до этого места.
+    // Почему почти всегда 0 или 1?
     let mut executor = Executor::new();
     executor.spawn(Task::new(shell()));
     executor.run();

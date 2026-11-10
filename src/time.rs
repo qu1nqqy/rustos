@@ -2,6 +2,7 @@ pub use calendar::{DateTime, days_in_month, is_leap_year};
 use core::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use core::time::Duration;
 pub use sleep::{MAX_SLEEPERS, Sleep, sleep, sleeping};
+// TODO: timeout(duration, future) - результат future или None, если тот не успел
 mod calendar;
 mod sleep;
 
@@ -24,7 +25,7 @@ pub const UTC: TimeZone = TimeZone {
 
 /// Часовой пояс для `date` и времени файлов. QEMU по умолчанию отдаёт в RTC
 /// время UTC, поэтому местное время считаем сами
-// TODO: команда для смены часового пояса
+// TODO: изменяемый часовой пояс (Mutex или атомики) и команда `tz UTC` / `tz MSK`
 pub const LOCAL: TimeZone = TimeZone {
     name: "MSK",
     offset_seconds: 3 * 60 * 60,

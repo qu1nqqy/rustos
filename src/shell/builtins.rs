@@ -71,7 +71,10 @@ pub const COMMANDS: &[Command] = &[
         name: "date",
         help: "print date and time (-u: UTC, +%s: Unix time)",
         run: Run::Sync(date),
-    }, // TODO: uname - имя ОС, версия (env!("CARGO_PKG_VERSION")) и архитектура
+    },
+    // TODO (статья 13): uname - имя ОС, с -a ещё версия и архитектура
+    // TODO: true и false - коды 0 и 1, пригодятся для && и ||
+    // TODO: cal - календарь текущего месяца (days_in_month и weekday первого числа)
 ];
 
 pub fn find(name: &str) -> Option<&'static Command> {
@@ -114,6 +117,7 @@ fn history(shell: &mut Shell, _args: &[&str], out: &mut dyn Write) -> CommandRes
     Ok(0)
 }
 
+// TODO: uptime --raw - секунды с миллисекундами, `up 12.340 s` (Duration::subsec_millis)
 fn uptime(_shell: &mut Shell, _args: &[&str], out: &mut dyn Write) -> CommandResult {
     let seconds = time::uptime().as_secs();
     let (hours, minutes, seconds) = (seconds / 3600, (seconds / 60) % 60, seconds % 60);
@@ -190,6 +194,8 @@ fn poweroff(_shell: &mut Shell, _args: &[&str], _out: &mut dyn Write) -> Command
     power::poweroff();
 }
 
+// TODO: date -d @1793095200 - дата для заданного Unix-времени
+// TODO: date -s 2026-12-31T23:59:50 - установить время через set_time. Что делать с RTC?
 fn date(_shell: &mut Shell, args: &[&str], out: &mut dyn Write) -> CommandResult {
     let tz = match args {
         [] => time::LOCAL,

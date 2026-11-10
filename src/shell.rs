@@ -44,6 +44,7 @@ impl Shell {
     }
 
     pub async fn execute(&mut self, line: &str, out: &mut dyn Write) -> i32 {
+        // TODO: заменять $? на код последней команды, чтобы работал `echo $?`
         let words = match split(line) {
             Ok(words) => words,
             Err(e) => {

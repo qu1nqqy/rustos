@@ -49,6 +49,8 @@ impl Future for Sleep {
                 Some(slot) => slot,
                 None => {
                     let free = sleepers.iter().position(Option::is_none);
+                    // TODO: обойтись без паники и без кучи в обработчике: таблицу
+                    // расширяет обычный код, а обработчик её только читает
                     let slot = free.expect("too many sleeping tasks");
                     self.slot = Some(slot);
                     slot
