@@ -67,7 +67,11 @@ pub const COMMANDS: &[Command] = &[
         help: "turn the computer off",
         run: Run::Sync(poweroff),
     },
-    // TODO: uname - имя ОС, версия (env!("CARGO_PKG_VERSION")) и архитектура
+    Command {
+        name: "date",
+        help: "print date and time (-u: UTC, +%s: Unix time)",
+        run: Run::Sync(date),
+    }, // TODO: uname - имя ОС, версия (env!("CARGO_PKG_VERSION")) и архитектура
 ];
 
 pub fn find(name: &str) -> Option<&'static Command> {
@@ -184,6 +188,37 @@ fn reboot(_shell: &mut Shell, _args: &[&str], _out: &mut dyn Write) -> CommandRe
 
 fn poweroff(_shell: &mut Shell, _args: &[&str], _out: &mut dyn Write) -> CommandResult {
     power::poweroff();
+}
+
+fn date(_shell: &mut Shell, args: &[&str], out: &mut dyn Write) -> CommandResult {
+    let tz = match args {
+        [] => time::LOCAL,
+        ["-u"] => time::UTC,
+        ["+%s"] => {
+            writeln!(out, "{}", time::now())?;
+            return Ok(0);
+        }
+        _ => {
+            writeln!(out, "usage: date [-u | +%s]")?;
+            return Ok(STATUS_USAGE);
+        }
+    };
+    writeln!(out, "{}", format_date(&time::now_in(tz), tz))?;
+    Ok(0)
+}
+
+pub fn format_date(date: &time::DateTime, tz: time::TimeZone) -> alloc::string::String {
+    alloc::format!(
+        "{} {} {:2} {:02}:{:02}:{:02} {} {}",
+        date.weekday_name(),
+        date.month_name(),
+        date.day,
+        date.hour,
+        date.minute,
+        date.second,
+        tz.name,
+        date.year
+    )
 }
 
 #[cfg(test)]
